@@ -14,6 +14,8 @@ namespace CSUtil.DB
         public SQLSizeAttribute(int size) { this.size = size; }
     }
 
+    public class SQLPrimaryAttribute : Attribute { }
+
     public class Database
     {
         MySqlConnection con = null;
@@ -251,21 +253,24 @@ namespace CSUtil.DB
 
             for (int i = 0; i < fields.Count; i++)
             {
-                str += fields[i].Name + "=\'" + fields[i].GetValue(value) + "\'";
+                string valueStr = "";
+                if(fields[i].PropertyType == typeof(DateTime))
+                {
+                    DateTime dt = (DateTime)fields[i].GetValue(value);
+                    valueStr = dt.ToString("yyyy-MM-dd hh:mm:ss");
+                }
+                else
+                {
+                    valueStr = fields[i].GetValue(value).ToString();
+                }
+
+                valueStr = MakeQuerySafe(valueStr);
+
+                str += fields[i].Name + "=\'" + valueStr + "\'";
 
                 if (i != fields.Count - 1)
                     str += ",";
             }
-            /*str += " WHERE ";
-            for (int i = 0; i < conditions.Count; i++)
-            {
-                str += conditions[i].name + "=";
-                string s = "?c" + i.ToString();
-                str += s;
-                parameters.Add(new MySqlParameter(s, conditions[i].value));
-
-                str += " " + conditions[i].junctionOp + " ";
-            }*/
             parameters = GetParameters(ref str, conditionsParams);
 
             str += ";";
@@ -284,7 +289,7 @@ namespace CSUtil.DB
             }
         }
 
-        public int InsertData<T>(T value, string table, List<PropertyInfo> fields = null)
+        public int InsertArray<T>(T[] values, string table, List<PropertyInfo> fields = null)
         {
             string str = "INSERT INTO " + table + "(";
             if (fields == null)
@@ -300,41 +305,43 @@ namespace CSUtil.DB
                     str += " ) ";
             }
 
-            /*str += " VALUES (";
-            for(int i = 0;i<fields.Count;i++)
-            {
-                str += "\'" + fields[i].GetValue(value).ToString() + "\'";
-
-                if (i != fields.Count - 1)
-                    str += ",";
-                else
-                    str += ");";
-            }*/
             List<MySqlParameter> parameters = new List<MySqlParameter>();
             if (fields.Count > 0)
             {
-                str += " VALUES(";
-                for (int i = 0; i < fields.Count; i++)
+                int it = 0;
+                str += " VALUES";
+                for (int j = 0; j < values.Length; j++)
                 {
-                    string s = "?c" + i.ToString();
-                    str += s;
-                    MySqlParameter param = null;
-                    if (fields[i].GetValue(value).GetType() == typeof(byte[]))
-                    {
-                        param = new MySqlParameter(s, MySqlDbType.VarBinary);
-                        param.Value = fields[i].GetValue(value);
-                    }
-                    else
-                    {
-                        param = new MySqlParameter(s, fields[i].GetValue(value));
-                    }
-                    parameters.Add(param);
+                    var value = values[j];
 
-                    if (i != fields.Count - 1)
+                    str += "(";
+                    for (int i = 0; i < fields.Count; i++)
+                    {
+                        string s = "?c" + it++.ToString();
+                        str += s;
+                        MySqlParameter param;
+                        if (fields[i].GetValue(value).GetType() == typeof(byte[]))
+                        {
+                            param = new MySqlParameter(s, MySqlDbType.VarBinary);
+                            param.Value = fields[i].GetValue(value);
+                        }
+                        else
+                        {
+                            param = new MySqlParameter(s, fields[i].GetValue(value));
+                        }
+                        parameters.Add(param);
+
+                        if (i != fields.Count - 1)
+                            str += ",";
+                        else
+                            str += ")";
+                    }
+
+                    if (j != values.Length - 1)
                         str += ",";
-                    else
-                        str += ");";
                 }
+
+                str += ";";
             }
 
             lock (conLock)
@@ -346,6 +353,11 @@ namespace CSUtil.DB
                 }
                 return cmd.ExecuteNonQuery();
             }
+        }
+
+        public int InsertData<T>(T value, string table, List<PropertyInfo> fields = null)
+        {
+            return InsertArray(new T[1] { value }, table, fields);
         }
 
         /// <summary>
@@ -506,11 +518,35 @@ namespace CSUtil.DB
             if (info.PropertyType == typeof(double))
                 return "DOUBLE";
 
+            if(info.PropertyType == typeof(TimeSpan))
+                return "TIME";
+
 
             if (info.PropertyType.IsArray)
                 throw new Exception("Arrays other than byte[] are not yet supported");
 
             return info.PropertyType.Name.ToUpper();
+        }
+
+        public string GetPrimaryKey(string table)
+        {
+            string cmdText = $"SHOW KEYS FROM `{table}` WHERE Key_name = 'PRIMARY'";
+            MySqlCommand cmd = new MySqlCommand(cmdText, con);
+
+            var rdr = cmd.ExecuteReader();
+
+            bool good = rdr.Read();
+            string ret = "";
+            if(good)
+            {
+                object[] values = new object[rdr.FieldCount];
+                rdr.GetValues(values);
+
+                ret = (string)values[4];
+            }
+
+            rdr.Close();
+            return ret;
         }
 
         public void CreateDBStruct(List<(string, Type)> tables)
@@ -526,10 +562,15 @@ namespace CSUtil.DB
 
                 if(!CheckTableExists(tableName))
                 {
+                    string primary = "";
+
                     Log.Normal($"\t\tCreating table `{tableName}`...");
                     string cText = $"CREATE TABLE `{con.Database}`.`{tableName}` (";
                     for (int j = 0; j < properties.Count;j++)
                     {
+                        if (properties[j].GetCustomAttribute<SQLPrimaryAttribute>() != null)
+                            primary = properties[j].Name;
+
                         cText += "`" + properties[j].Name + "` " + GetDbTypeName(properties[j]);
                         if (j != properties.Count - 1)
                             cText += ", ";
@@ -540,6 +581,12 @@ namespace CSUtil.DB
                     MySqlCommand c = new MySqlCommand(cText, con);
                     c.ExecuteNonQuery();
                     
+                    if(primary != "")
+                    {
+                        c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primary}`);", con);
+                        c.ExecuteNonQuery();
+                    }
+
                     continue;
                 }
 
@@ -548,6 +595,8 @@ namespace CSUtil.DB
                 var columns = rdr.GetColumnSchema();
                 rdr.Close();
 
+
+                string primaryKey = "";
                 // Find changes and fix them
                 for (int j = 0;j<properties.Count;j++)
                 {
@@ -555,6 +604,9 @@ namespace CSUtil.DB
 
                     if (prop.GetCustomAttribute<SQLIgnoreAttribute>() != null)
                         continue;
+
+                    if(prop.GetCustomAttribute<SQLPrimaryAttribute>() != null)
+                        primaryKey = prop.Name;
 
                     bool found = false;
                     for (int k = 0; k < columns.Count;k++)
@@ -574,6 +626,16 @@ namespace CSUtil.DB
                         MySqlCommand c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD `{prop.Name}` {GetDbTypeName(prop)};", con);
                         c.ExecuteNonQuery();
                     }
+                }
+
+                var tablePrimary = GetPrimaryKey(tableName);
+                if(tablePrimary != primaryKey)
+                {
+                    if(tablePrimary != "")
+                        new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", con).ExecuteNonQuery();
+
+                    if (primaryKey != "")
+                        new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primaryKey}`)", con).ExecuteNonQuery();
                 }
             }
             Log.Normal("Checking tables done");
