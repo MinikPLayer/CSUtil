@@ -112,7 +112,7 @@ namespace CSUtil.DB
                     string s = "?c" + i.ToString();
                     str += s;
                     MySqlParameter param = null;
-                    if (conditions[i].value.GetType() == typeof(byte[]))
+                    if (conditions[i].value != null && conditions[i].value.GetType() == typeof(byte[]))
                     {
                         param = new MySqlParameter(s, MySqlDbType.VarBinary);
                         param.Value = conditions[i].value;
