@@ -100,6 +100,9 @@ namespace CSUtil.DB
                 str += " WHERE ";
                 for (int i = 0; i < conditions.Length; i++)
                 {
+                    if (i > 0)
+                        str += " " + conditions[i].junctionOp + " ";
+
                     str += conditions[i].name;
                     if (conditions[i].type == SQLCondition.ConditionTypes.Like)
                         str += " LIKE ";
@@ -122,9 +125,6 @@ namespace CSUtil.DB
                         param = new MySqlParameter(s, conditions[i].value);
                     }
                     parameters.Add(param);
-
-                    if (i != conditions.Length - 1)
-                        str += " " + conditions[i].junctionOp + " ";
                 }
             }
 
