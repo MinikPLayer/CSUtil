@@ -1,4 +1,4 @@
-﻿using PWDTK_DOTNET451;
+﻿using PWDTK_NETCore;
 using System;
 using System.Collections.Generic;
 using System.Text;
