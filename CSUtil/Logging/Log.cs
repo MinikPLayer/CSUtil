@@ -9,7 +9,7 @@ namespace CSUtil.Logging
     {
         public static void Normal(object data, bool newLine = true, ConsoleColor color = ConsoleColor.White, [CallerMemberName] string callerName = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int lineNumber = -1)
         {
-            string str = $"[{callerName}] {data}";
+            string str = $"{filePath}:{lineNumber} |{callerName}| {data}";
             if (newLine)
                 str += "\n";
 #if DEBUG
@@ -27,19 +27,19 @@ namespace CSUtil.Logging
 #endif
         }
 
-        public static void Warning(object data, bool newLine = true)
+        public static void Warning(object data, bool newLine = true, [CallerMemberName] string callerName = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int lineNumber = -1)
         {
-            Normal(data, newLine, ConsoleColor.Yellow);
+            Normal(data, newLine, ConsoleColor.Yellow, callerName, filePath, lineNumber);
         }
 
-        public static void Error(object data, bool newLine = true)
+        public static void Error(object data, bool newLine = true, [CallerMemberName] string callerName = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int lineNumber = -1)
         {
-            Normal(data, newLine, ConsoleColor.Red);
+            Normal(data, newLine, ConsoleColor.Red, callerName, filePath, lineNumber);
         }
 
-        public static void FatalError(object data)
+        public static void FatalError(object data, [CallerMemberName] string callerName = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int lineNumber = -1)
         {
-            Normal("[FATAL ERROR] " + data, true, ConsoleColor.DarkRed);
+            Normal("[FATAL ERROR] " + data, true, ConsoleColor.DarkRed, callerName, filePath, lineNumber);
         }
     }
 }

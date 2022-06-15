@@ -360,6 +360,11 @@ namespace CSUtil.DB
             return InsertArray(new T[1] { value }, table, fields);
         }
 
+        public List<T> GetData<T>(string table, params SQLCondition[] conditionsParams) where T : new()
+        {
+            return GetData<T>(table, "*", "", null, conditionsParams);
+        }
+
         /// <summary>
         /// Wrapper for easier use of SendQuery function. 
         /// WARNING! I've tried for it to be safe, but it's probably not. Use with caution!
@@ -369,7 +374,7 @@ namespace CSUtil.DB
         /// <param name="queryFilter">Filter for query, example: "*" for all, "(p1, p2)" for columns p1 and p2</param>
         /// <param name="fields">Fields to populate in the struct, leave null to auto populate</param>
         /// <returns>List of structs containing data from query</returns>
-        public List<T> GetData<T>(string table, string queryFilter = "*", string orderBy = "", List<PropertyInfo> fields = null, params SQLCondition[] conditionsParams) where T : new()
+        public List<T> GetData<T>(string table, string queryFilter, string orderBy, List<PropertyInfo> fields, params SQLCondition[] conditionsParams) where T : new()
         {
             List<MySqlParameter> parameters = new List<MySqlParameter>();
             string str = "SELECT " + queryFilter + " FROM " + table;
@@ -645,8 +650,16 @@ namespace CSUtil.DB
         {
             lock (conLock)
             {
-                con = new MySqlConnection(connectionString);
-                con.Open();
+                try
+                {
+                    con = new MySqlConnection(connectionString);
+                    con.Open();
+                }
+                catch(MySqlException e)
+                {
+                    Log.FatalError("Cannot connect to database: \n" + e.ToString());
+                    throw new Exception("Cannot connect to database");
+                }
             }
 
             return IsAlive;
