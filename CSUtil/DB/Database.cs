@@ -564,6 +564,9 @@ namespace CSUtil.DB
                 Log.Normal($"\tChecking table `{tableName}`...");
 
                 var properties = GetProperties(type);
+                // Skip empty tables
+                if(properties.Count == 0)
+                    continue;
 
                 if(!CheckTableExists(tableName))
                 {
