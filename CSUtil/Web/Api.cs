@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace CSUtil.Web
 {
-    public static class HttpRequest
+    public static class Api
     {
         private static readonly HttpClient client = new HttpClient();
         static string baseUrl = "http://127.0.0.1";
