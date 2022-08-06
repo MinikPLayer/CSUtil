@@ -294,8 +294,7 @@ namespace CSUtil.DB
             }
             parameters.AddRange(GetParameters(ref str, conditionsParams));
             str += ";";
-
-
+            
             MySqlCommand cmd = new MySqlCommand(str, con);
 
             for (int i = 0; i < parameters.Count; i++)
