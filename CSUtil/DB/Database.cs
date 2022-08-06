@@ -1,6 +1,7 @@
 ﻿using MySqlConnector;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Reflection;
 using System.Text;
 using CSUtil.Logging;
@@ -115,7 +116,7 @@ namespace CSUtil.DB
                     string s = "?c" + i.ToString();
                     str += s;
                     MySqlParameter param = null;
-                    if (conditions[i].value != null && conditions[i].value.GetType() == typeof(byte[]))
+                    if (conditions[i].value.GetType() == typeof(byte[]))
                     {
                         param = new MySqlParameter(s, MySqlDbType.VarBinary);
                         param.Value = conditions[i].value;
@@ -239,6 +240,11 @@ namespace CSUtil.DB
             }
         }
 
+        static string ByteArrayToVarBinaryString(byte[] data)
+        {
+            return "0x" + BitConverter.ToString(data).Replace("-", "");
+        }
+
         public int Update<T>(T value, string table, params SQLCondition[] conditionsParams)
         {
             return Update(value, table, null, conditionsParams);
@@ -253,11 +259,21 @@ namespace CSUtil.DB
 
             for (int i = 0; i < fields.Count; i++)
             {
+                bool raw = false;
                 string valueStr = "";
                 if(fields[i].PropertyType == typeof(DateTime))
                 {
                     DateTime dt = (DateTime)fields[i].GetValue(value);
                     valueStr = dt.ToString("yyyy-MM-dd hh:mm:ss");
+                }
+                else if (fields[i].PropertyType == typeof(System.Byte[]))
+                {
+                    valueStr = ByteArrayToVarBinaryString((byte[]) fields[i].GetValue(value) ?? new byte[] { } );
+                    raw = true;
+                }
+                else if (fields[i].PropertyType == typeof(bool))
+                {
+                    valueStr = (bool)fields[i].GetValue(value) ? "1" : "0";
                 }
                 else
                 {
@@ -266,13 +282,17 @@ namespace CSUtil.DB
 
                 valueStr = MakeQuerySafe(valueStr);
 
-                str += fields[i].Name + "=\'" + valueStr + "\'";
+                
+                str += fields[i].Name;
+                if(raw)
+                    str += '=' + valueStr;
+                else
+                    str += "=\'" + valueStr + "\'";
 
                 if (i != fields.Count - 1)
                     str += ",";
             }
-            parameters = GetParameters(ref str, conditionsParams);
-
+            parameters.AddRange(GetParameters(ref str, conditionsParams));
             str += ";";
 
 

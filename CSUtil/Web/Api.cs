@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -23,6 +24,7 @@ namespace CSUtil.Web
         {
             public bool success { get; set; }
             public HttpStatusCode code { get; set; }
+            public string failReason { get; set; }
             public T value { get; set; }
 
             public static implicit operator bool(Result<T> instance)
@@ -35,15 +37,27 @@ namespace CSUtil.Web
                 return instance.value;
             }
 
-            private Result(T value, HttpStatusCode code)
+            private Result(T value, HttpStatusCode code, string reason = "")
             {
                 this.value = value;
                 this.code = code;
                 this.success = code == HttpStatusCode.OK;
+                this.failReason = reason;
             }
 
             public static Result<T> Success(T value) => new Result<T>(value, HttpStatusCode.OK);
-            public static Result<T> Failure(HttpStatusCode code) => new Result<T>(default(T), code);
+            public static Result<T> Failure(HttpStatusCode code, string reason = "") => new Result<T>(default(T), code, reason);
+        }
+
+        public static string token = "";
+
+        public static Param ToApiParam<T>(this string s, T value)
+        {
+            return new Param()
+            {
+                name = s,
+                value = value.ToString() ?? ""
+            };
         }
 
         static Uri GetURL(string path, params Param[] ps)
@@ -53,6 +67,10 @@ namespace CSUtil.Web
             builder.Port = port;
             
             var query = HttpUtility.ParseQueryString(builder.Query);
+            
+            if(!string.IsNullOrEmpty(token))
+                query["token"] = token;
+            
             for(int i = 0;i<ps.Length;i++)
                 query[ps[i].name] = ps[i].value;
                 
@@ -68,18 +86,68 @@ namespace CSUtil.Web
             return JsonConvert.DeserializeObject<T>(value);
         }
 
-        public static async Task<Result<T>> Get<T>(string path, params Param[] ps)
+        static async Task<Result<T>> Send<T>(HttpRequestMessage msg)
         {
+            HttpResponseMessage ret;
             try
             {
-                var ret = await client.GetStreamAsync(GetURL(path, ps));
-                var outValue = ConvertToValue<T>(await new StreamReader(ret).ReadToEndAsync());
-                return Result<T>.Success(outValue);
+                ret = await client.SendAsync(msg);
             }
-            catch(HttpRequestException e)
+            catch (HttpRequestException e)
             {
-                return Result<T>.Failure(e.StatusCode ?? HttpStatusCode.SeeOther);
+                if(!e.StatusCode.HasValue)
+                    return Result<T>.Failure(HttpStatusCode.RedirectMethod, "Can't connect to server");
+                else
+                    return Result<T>.Failure(e.StatusCode.Value);
             }
+
+            var outString = await ret.Content.ReadAsStringAsync();
+            if(!ret.IsSuccessStatusCode)
+                return Result<T>.Failure(ret.StatusCode, outString);
+                
+            var outValue = ConvertToValue<T>(outString);
+            return Result<T>.Success(outValue);
+        }
+
+        public static async Task<Result<T>> Get<T>(string path, params Param[] ps)
+        {
+            // try
+            // {
+            //     var ret = await client.GetStreamAsync(GetURL(path, ps));
+            //     var outValue = ConvertToValue<T>(await new StreamReader(ret).ReadToEndAsync());
+            //     return Result<T>.Success(outValue);
+            // }
+            // catch(HttpRequestException e)
+            // {
+            //     return Result<T>.Failure(e.StatusCode ?? HttpStatusCode.SeeOther);
+            // }
+            
+            var request = new HttpRequestMessage(HttpMethod.Get, GetURL(path, ps));
+            return await Send<T>(request);
+        }
+
+        static List<(HttpStatusCode code, string text)> errorCodesMeaningDict = new List<(HttpStatusCode, string text)>
+        {
+            (HttpStatusCode.Accepted, "OK"),
+            (HttpStatusCode.RedirectMethod, "Connection refused")
+        };
+        public static string GetErrorCodesMeaning<T>(Result<T> ret, string defaultMessage = "?", params (HttpStatusCode code, string text)[] customDict)
+        {
+            if(!string.IsNullOrEmpty(ret.failReason))
+                return ret.failReason;
+        
+            foreach (var option in errorCodesMeaningDict)
+                if(ret.code == option.code)
+                    return option.text;
+            
+            foreach(var item in customDict)
+                if(ret.code == item.code)
+                    return item.text;
+                
+            if(defaultMessage == "?")
+                return ret.code.ToString();
+                
+            return defaultMessage;
         }
     }
 }

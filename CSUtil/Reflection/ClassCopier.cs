@@ -10,6 +10,56 @@ namespace CSUtil.Reflection
             return typeof(T).GetProperties();
         }
 
+        public static T Create<T>(object source) where T: new()
+        {
+            T dest = new T();
+            var t1p = source.GetType().GetProperties();
+            var t2p = GetProperties<T>();
+
+            for (int i = 0; i < t1p.Length; i++)
+            {
+                for (int j = 0; j < t2p.Length; j++)
+                {
+                    if (t1p[i].Name == t2p[j].Name && t1p[i].PropertyType == t2p[j].PropertyType)
+                    {
+                        t2p[j].SetValue(dest, t1p[i].GetValue(source));
+                        break;
+                    }
+                }
+            }
+
+            return dest;
+        }
+        
+        public static List<T2> CreateList<T1, T2>(List<T1> source) where T2 : new()
+        {
+            var t1p = GetProperties<T1>();
+            var t2p = GetProperties<T2>();
+
+            var dest = new List<T2>();
+
+            for (int i = 0; i < source.Count; i++)
+                dest.Add(new T2());
+
+            for (int i = 0; i < t1p.Length; i++)
+            {
+                for (int j = 0; j < t2p.Length; j++)
+                {
+                    if (t1p[i].Name == t2p[j].Name && t1p[i].PropertyType == t2p[j].PropertyType)
+                    {
+                        for (int k = 0; k < source.Count; k++)
+                        {
+                            t2p[j].SetValue(dest[k], t1p[i].GetValue(source[k]));
+                        }
+
+                        break;
+                    }
+                }
+            }
+
+            return dest;
+        }
+
         public static int Copy<T1, T2>(T1 source, T2 dest)
         {
             var t1p = GetProperties<T1>();
