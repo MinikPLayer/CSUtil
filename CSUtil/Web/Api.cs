@@ -109,19 +109,14 @@ namespace CSUtil.Web
             return Result<T>.Success(outValue);
         }
 
+        public static async Task<Result<T>> Post<T>(string path, params Param[] ps)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, GetURL(path, ps));
+            return await Send<T>(request);
+        }
+
         public static async Task<Result<T>> Get<T>(string path, params Param[] ps)
         {
-            // try
-            // {
-            //     var ret = await client.GetStreamAsync(GetURL(path, ps));
-            //     var outValue = ConvertToValue<T>(await new StreamReader(ret).ReadToEndAsync());
-            //     return Result<T>.Success(outValue);
-            // }
-            // catch(HttpRequestException e)
-            // {
-            //     return Result<T>.Failure(e.StatusCode ?? HttpStatusCode.SeeOther);
-            // }
-            
             var request = new HttpRequestMessage(HttpMethod.Get, GetURL(path, ps));
             return await Send<T>(request);
         }
