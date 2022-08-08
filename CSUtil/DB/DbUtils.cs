@@ -13,6 +13,16 @@ namespace CSUtil.DB
             return new Database.SQLCondition() { name = str, value = obj, junctionOp = junctionOp, type = type };
         }
 
+        public static Database.SQLCondition SQLpNull(this string str, string junctionOp = Database.SQLCondition.J_AND)
+        {
+            return new Database.SQLCondition() { name = str, value = "", junctionOp = junctionOp, type = Database.SQLCondition.ConditionTypes.IsNull};
+        }
+        
+        public static Database.SQLCondition SQLpNotNull(this string str, string junctionOp = Database.SQLCondition.J_AND)
+        {
+            return new Database.SQLCondition() { name = str, value = "", junctionOp = junctionOp, type = Database.SQLCondition.ConditionTypes.IsNotNull};
+        }
+
         public static int GenerateUniqueId(this Database db, string table, string column, int tries = 10000)
         {
             for (int i = 0; i < tries; i++)
@@ -32,7 +42,7 @@ namespace CSUtil.DB
         {
             for (int i = 0; i < tries; i++)
             {
-                string random = Password.GenerateToken();
+                string random = Guid.NewGuid().ToString();
                 var exist = db.Count(table, column.SQLp(random));
                 if(exist == 0)
                     return random;

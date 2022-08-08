@@ -77,7 +77,9 @@ namespace CSUtil.DB
             {
                 Equals,
                 Like,
-                NotLike
+                NotLike,
+                IsNull,
+                IsNotNull
             }
 
             public ConditionTypes type;
@@ -109,6 +111,16 @@ namespace CSUtil.DB
                         str += " LIKE ";
                     else if (conditions[i].type == SQLCondition.ConditionTypes.NotLike)
                         str += " NOT LIKE ";
+                    else if (conditions[i].type == SQLCondition.ConditionTypes.IsNull)
+                    {
+                        str += " IS NULL";
+                        continue;
+                    }
+                    else if (conditions[i].type == SQLCondition.ConditionTypes.IsNotNull)
+                    {
+                        str += " IS NOT NULL";
+                        continue;
+                    }
                     else
                         str += "=";
 
