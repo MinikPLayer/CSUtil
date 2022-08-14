@@ -396,6 +396,11 @@ namespace CSUtil.DB
             return GetData<T>(table, "*", "", null, conditionsParams);
         }
 
+        public List<T> GetData<T>(string table, string sortBy, params SQLCondition[] conditionParams) where T : new()
+        {
+            return GetData<T>(table, "*", sortBy, null, conditionParams);
+        }
+
         /// <summary>
         /// Wrapper for easier use of SendQuery function. 
         /// WARNING! I've tried for it to be safe, but it's probably not. Use with caution!
@@ -411,22 +416,6 @@ namespace CSUtil.DB
             string str = "SELECT " + queryFilter + " FROM " + table;
             str = MakeQuerySafe(str);
 
-            /*if (conditions != null && conditions.Count != 0)
-            {
-                //str += " WHERE ?cond";
-                //parameters.Add(new MySqlParameter("?cond", condition));
-                str += " WHERE ";
-                for (int i = 0; i < conditions.Count; i++)
-                {
-                    str += conditions[i].name + "=";
-                    string s = "?c" + i.ToString();
-                    str += s;
-                    parameters.Add(new MySqlParameter(s, conditions[i].value.ToString()));
-
-                    if(i != conditions.Count - 1)
-                        str += " " + conditions[i].junctionOp + " ";
-                }
-            }*/
             parameters = GetParameters(ref str, conditionsParams);
 
             if (orderBy.Length > 0)
