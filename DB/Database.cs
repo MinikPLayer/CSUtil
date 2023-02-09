@@ -95,6 +95,11 @@ namespace CSUtil.DB
             public const string J_OR = "OR";
         }
 
+        public static bool IsTypeEqual(Type dbType, Type localType)
+        {
+            return (dbType == typeof(int) && localType.IsEnum) || dbType == localType;
+        }
+
         public List<MySqlParameter> GetParameters(ref string str, SQLCondition[] conditions)
         {
             List<MySqlParameter> parameters = new List<MySqlParameter>();
@@ -175,7 +180,7 @@ namespace CSUtil.DB
                 bool found = false;
                 for (int j = 0; j < fields.Count; j++)
                 {
-                    if (fields[j].PropertyType == type && fields[j].Name == name)
+                    if (IsTypeEqual(type, fields[j].PropertyType) && fields[j].Name == name)
                     {
                         found = true;
                         if (!Attribute.IsDefined(fields[j], typeof(SQLIgnoreAttribute)))
@@ -531,7 +536,7 @@ namespace CSUtil.DB
                 else
                     return $"VARBINARY({attr.size})";
             }
-            if(info.PropertyType == typeof(int))
+            if(info.PropertyType == typeof(int) || info.PropertyType.IsEnum)
                 return "INT";
 
             if (info.PropertyType == typeof(long))
@@ -640,7 +645,7 @@ namespace CSUtil.DB
                     for (int k = 0; k < columns.Count;k++)
                     {
                         var col = columns[k];
-                        if(col.DataType == prop.PropertyType &&
+                        if(IsTypeEqual(col.DataType, prop.PropertyType) &&
                             col.ColumnName == prop.Name)
                         {
                             found = true;
