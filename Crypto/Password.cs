@@ -14,38 +14,24 @@ namespace CSUtil.Crypto
             public byte[] salt;
         }
 
-        static (char start, char end)[] randomCharRanges = new (char start, char end)[]
-        {
-            ('a', 'z'),
-            ('A', 'Z'),
-            ('0', '9')
-        };
-        
-        static char GetRandomChar()
-        {
-            int r1 = Random.Shared.Next(0, randomCharRanges.Length);
-            int r2 = Random.Shared.Next(0, randomCharRanges[r1].end - randomCharRanges[r1].start + 1);
-            
-            return (char)(randomCharRanges[r1].start + r2);
-        }
-
-        const int tokenLength = 64;
+        const int tokenLength = 128;
         public static string GenerateToken(int length = -1)
         {
             if(length < 0)
                 length = tokenLength;
-                
-            string ret = "";
-            for (int i = 0; i < length; i++)
-                ret += GetRandomChar();
-                
-            return ret;
+
+            var salt = GenerateSalt(length);
+            var token = Convert.ToBase64String(salt);
+            return token.Substring(0, tokenLength);
         }
 
         public const int saltLength = 64;
-        public static byte[] GenerateSalt()
+        public static byte[] GenerateSalt(int length = -1)
         {
-            return PWDTK.GetRandomSalt(saltLength);
+            if (length < 0)
+                length = saltLength;
+
+            return PWDTK.GetRandomSalt(length);
         }
 
         public static HashedPassword GetPasswordHash(string password, byte[] salt = null)
