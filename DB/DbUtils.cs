@@ -23,7 +23,7 @@ namespace CSUtil.DB
             return new Database.SQLCondition() { name = str, value = "", junctionOp = junctionOp, type = Database.SQLCondition.ConditionTypes.IsNotNull};
         }
 
-        public static int GenerateUniqueId(this Database db, string table, string column, int tries = 10000)
+        public static int GenerateUniqueIdInt(this Database db, string table, string column, int tries = 10000)
         {
             for (int i = 0; i < tries; i++)
             {
@@ -33,6 +33,29 @@ namespace CSUtil.DB
                     return random;
             }
             
+            // Cannot generate unique id in tries
+            Log.Error("Cannot generate unique id in " + tries + " times");
+            throw new OverflowException("Cannot generate unique id");
+        }
+
+        static long RandomLong()
+        {
+            long result = Random.Shared.Next();
+            result = (result << 32);
+            result = result | (long)Random.Shared.Next();
+            return result;
+        }
+
+        public static long GenerateUniqueIdLong(this Database db, string table, string column, int tries = 10000)
+        {
+            for (int i = 0; i < tries; i++)
+            {
+                var random = RandomLong();
+                var exist = db.Count(table, column.SQLp(random));
+                if (exist == 0)
+                    return random;
+            }
+
             // Cannot generate unique id in tries
             Log.Error("Cannot generate unique id in " + tries + " times");
             throw new OverflowException("Cannot generate unique id");
