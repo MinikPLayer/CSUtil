@@ -406,9 +406,9 @@ namespace CSUtil.DB
             return GetData<T>(table, "*", "", null, conditionsParams);
         }
 
-        public List<T> GetData<T>(string table, string sortBy, params SQLCondition[] conditionParams) where T : new()
+        public List<T> GetData<T>(string table, string orderBy, params SQLCondition[] conditionParams) where T : new()
         {
-            return GetData<T>(table, "*", sortBy, null, conditionParams);
+            return GetData<T>(table, "*", orderBy, null, conditionParams);
         }
 
         /// <summary>
