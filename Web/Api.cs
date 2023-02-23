@@ -20,35 +20,6 @@ namespace CSUtil.Web
             public string value { get; set; } = "";
         }
 
-        public class Result<T>
-        {
-            public bool success { get; set; }
-            public HttpStatusCode code { get; set; }
-            public string failReason { get; set; }
-            public T value { get; set; }
-
-            public static implicit operator bool(Result<T> instance)
-            {
-                return instance.success;
-            }
-
-            public static implicit operator T(Result<T> instance)
-            {
-                return instance.value;
-            }
-
-            private Result(T value, HttpStatusCode code, string reason = "")
-            {
-                this.value = value;
-                this.code = code;
-                this.success = code == HttpStatusCode.OK;
-                this.failReason = reason;
-            }
-
-            public static Result<T> Success(T value) => new Result<T>(value, HttpStatusCode.OK);
-            public static Result<T> Failure(HttpStatusCode code, string reason = "") => new Result<T>(default(T), code, reason);
-        }
-
         public static string token = "";
 
         public static Param ToApiParam<T>(this string s, T value)
@@ -86,7 +57,7 @@ namespace CSUtil.Web
             return JsonConvert.DeserializeObject<T>(value);
         }
 
-        static async Task<Result<T>> Send<T>(HttpRequestMessage msg)
+        static async Task<ApiResult<T>> Send<T>(HttpRequestMessage msg)
         {
             HttpResponseMessage ret;
             try
@@ -96,26 +67,26 @@ namespace CSUtil.Web
             catch (HttpRequestException e)
             {
                 if(!e.StatusCode.HasValue)
-                    return Result<T>.Failure(HttpStatusCode.RedirectMethod, "Can't connect to server");
+                    return new ApiResult<T>(HttpStatusCode.RedirectMethod, "Can't connect to server");
                 else
-                    return Result<T>.Failure(e.StatusCode.Value);
+                    return new ApiResult<T>(e.StatusCode.Value, "");
             }
 
             var outString = await ret.Content.ReadAsStringAsync();
             if(!ret.IsSuccessStatusCode)
-                return Result<T>.Failure(ret.StatusCode, outString);
+                return new ApiResult<T>(ret.StatusCode, outString);
                 
             var outValue = ConvertToValue<T>(outString);
-            return Result<T>.Success(outValue);
+            return new ApiResult<T>(outValue);
         }
 
-        public static async Task<Result<T>> Post<T>(string path, params Param[] ps)
+        public static async Task<ApiResult<T>> Post<T>(string path, params Param[] ps)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, GetURL(path, ps));
             return await Send<T>(request);
         }
 
-        public static async Task<Result<T>> Get<T>(string path, params Param[] ps)
+        public static async Task<ApiResult<T>> Get<T>(string path, params Param[] ps)
         {
             var request = new HttpRequestMessage(HttpMethod.Get, GetURL(path, ps));
             return await Send<T>(request);
@@ -126,21 +97,21 @@ namespace CSUtil.Web
             (HttpStatusCode.Accepted, "OK"),
             (HttpStatusCode.RedirectMethod, "Connection refused")
         };
-        public static string GetErrorCodesMeaning<T>(Result<T> ret, string defaultMessage = "?", params (HttpStatusCode code, string text)[] customDict)
+        public static string GetErrorCodesMeaning<T>(ApiResult<T> ret, string defaultMessage = "?", params (HttpStatusCode code, string text)[] customDict)
         {
-            if(!string.IsNullOrEmpty(ret.failReason))
-                return ret.failReason;
+            if(!string.IsNullOrEmpty(ret.Message))
+                return ret.Message;
         
             foreach (var option in errorCodesMeaningDict)
-                if(ret.code == option.code)
+                if(ret.StatusCode == option.code)
                     return option.text;
             
             foreach(var item in customDict)
-                if(ret.code == item.code)
+                if(ret.StatusCode == item.code)
                     return item.text;
                 
             if(defaultMessage == "?")
-                return ret.code.ToString();
+                return ret.StatusCode.ToString();
                 
             return defaultMessage;
         }
