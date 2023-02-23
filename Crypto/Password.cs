@@ -22,7 +22,7 @@ namespace CSUtil.Crypto
 
             var salt = GenerateSalt(length);
             var token = Convert.ToBase64String(salt);
-            return token.Substring(0, tokenLength);
+            return token.Substring(0, length);
         }
 
         public const int saltLength = 64;

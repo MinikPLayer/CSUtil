@@ -8,14 +8,19 @@ using CSUtil.Logging;
 
 namespace CSUtil.DB
 {
+    [AttributeUsage(AttributeTargets.Class)]
+    public class SQLCaseSensitiveAttribute : Attribute { }
+
+    [AttributeUsage(AttributeTargets.Property)]
     public class SQLIgnoreAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Property)]
+    public class SQLPrimaryAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Property)]
     public class SQLSizeAttribute : Attribute 
     {
         public readonly int size;
         public SQLSizeAttribute(int size) { this.size = size; }
     }
-
-    public class SQLPrimaryAttribute : Attribute { }
 
     public class Database
     {
@@ -609,7 +614,11 @@ namespace CSUtil.DB
                             cText += ", ";
                     }
 
-                    cText += ");";
+                    cText += ")";
+                    if (type.GetCustomAttribute<SQLCaseSensitiveAttribute>() != null)
+                        cText += " COLLATE utf8_bin";
+
+                    cText += ";";
 
                     MySqlCommand c = new MySqlCommand(cText, con);
                     c.ExecuteNonQuery();
