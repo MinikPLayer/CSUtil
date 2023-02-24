@@ -5,6 +5,9 @@ using System.Data;
 using System.Reflection;
 using System.Text;
 using CSUtil.Logging;
+using System.Linq;
+using Newtonsoft.Json.Linq;
+using System.ComponentModel;
 
 namespace CSUtil.DB
 {
@@ -33,7 +36,7 @@ namespace CSUtil.DB
             {
                 if (con == null)
                     return false;
-                return !(con.State == System.Data.ConnectionState.Closed || con.State == System.Data.ConnectionState.Broken || con.State == System.Data.ConnectionState.Connecting);
+                return !(con.State == ConnectionState.Closed || con.State == ConnectionState.Broken || con.State == ConnectionState.Connecting);
             }
         }
 
@@ -56,14 +59,6 @@ namespace CSUtil.DB
         /// <returns>Safe query string</returns>
         public string MakeQuerySafe(string s)
         {
-            /*return s.Replace("'", "\\'")
-                .Replace("\"", "\\\"")
-                .Replace("b", "\\b")
-                .Replace("\n", "\\n")
-                .Replace("\r", "\\r")
-                .Replace("\t", "\\t")
-                .Replace("\\", "\\\\");*/
-
             string str = "";
             for (int i = 0; i < s.Length; i++)
             {
@@ -102,10 +97,42 @@ namespace CSUtil.DB
 
         public static bool IsTypeEqual(Type dbType, Type localType)
         {
-            return (dbType == typeof(int) && localType.IsEnum) || dbType == localType;
+            var customType = localType.GetCustomAttribute<CustomDbTypeAttribute>();
+            if (customType != null)
+            {
+                return customType.DbType == dbType;
+            }
+            else
+            {
+                return (dbType == typeof(int) && localType.IsEnum) || dbType == localType;
+            }
         }
 
-        public List<MySqlParameter> GetParameters(ref string str, SQLCondition[] conditions)
+        public MySqlParameter GetParameter(ref string str, int index, object value)
+        {
+            string s = "?c" + index.ToString();
+            str += s;
+
+            MySqlParameter param;
+            var customAttr = value.GetType().GetCustomAttribute<CustomDbTypeAttribute>();
+            if(customAttr != null)
+            {
+                param = new MySqlParameter(s, value.ToString());
+            }
+            else if (value.GetType() == typeof(byte[]))
+            {
+                param = new MySqlParameter(s, MySqlDbType.VarBinary);
+                param.Value = value;
+            }
+            else
+            {
+                param = new MySqlParameter(s, value);
+            }
+
+            return param;
+        }
+
+        public List<MySqlParameter> GetWhereParameters(ref string str, SQLCondition[] conditions)
         {
             List<MySqlParameter> parameters = new List<MySqlParameter>();
             if (conditions.Length > 0)
@@ -118,9 +145,13 @@ namespace CSUtil.DB
 
                     str += conditions[i].name;
                     if (conditions[i].type == SQLCondition.ConditionTypes.Like)
+                    {
                         str += " LIKE ";
+                    }
                     else if (conditions[i].type == SQLCondition.ConditionTypes.NotLike)
+                    {
                         str += " NOT LIKE ";
+                    }
                     else if (conditions[i].type == SQLCondition.ConditionTypes.IsNull)
                     {
                         str += " IS NULL";
@@ -132,21 +163,11 @@ namespace CSUtil.DB
                         continue;
                     }
                     else
+                    {
                         str += "=";
-
-
-                    string s = "?c" + i.ToString();
-                    str += s;
-                    MySqlParameter param = null;
-                    if (conditions[i].value.GetType() == typeof(byte[]))
-                    {
-                        param = new MySqlParameter(s, MySqlDbType.VarBinary);
-                        param.Value = conditions[i].value;
                     }
-                    else
-                    {
-                        param = new MySqlParameter(s, conditions[i].value);
-                    }
+
+                    var param = GetParameter(ref str, i, conditions[i].value);
                     parameters.Add(param);
                 }
             }
@@ -202,35 +223,42 @@ namespace CSUtil.DB
             return returnFields;
         }
 
+        string GetProperty<T>(PropertyInfo prop, T value)
+        {
+            bool raw = false;
+            string valueStr;
+            if (prop.PropertyType == typeof(DateTime))
+            {
+                DateTime dt = (DateTime)prop.GetValue(value);
+                valueStr = dt.ToString("yyyy-MM-dd hh:mm:ss");
+            }
+            else if (prop.PropertyType == typeof(byte[]))
+            {
+                valueStr = ByteArrayToVarBinaryString((byte[])prop.GetValue(value) ?? new byte[] { });
+                raw = true;
+            }
+            else if (prop.PropertyType == typeof(bool))
+            {
+                valueStr = (bool)prop.GetValue(value) ? "1" : "0";
+            }
+            else
+            {
+                valueStr = prop.GetValue(value).ToString();
+            }
+
+            valueStr = MakeQuerySafe(valueStr);
+            return raw ? valueStr : "\"" + valueStr + "\"";
+        }
+
         public int Count(string table, params SQLCondition[] conditions)
         {
-            List<MySqlParameter> parameters = new List<MySqlParameter>();
             string str = $"SELECT COUNT(*) FROM {table}";
-
-            /*if (conditions.Length > 0)
-            {
-                str += " WHERE ";
-                for (int i = 0; i < conditions.Length; i++)
-                {
-                    str += conditions[i].name + "=";
-                    string s = "?c" + i.ToString();
-                    str += s;
-                    parameters.Add(new MySqlParameter(s, conditions[i].value));
-
-                    str += " " + conditions[i].junctionOp + " ";
-                }
-            }*/
-            parameters = GetParameters(ref str, conditions);
-
+            var parameters = GetWhereParameters(ref str, conditions);
             str += ";";
 
-
             MySqlCommand cmd = new MySqlCommand(str, con);
-
             for (int i = 0; i < parameters.Count; i++)
-            {
-                cmd.Parameters.Add(parameters[i]);
-            }
+                cmd.Parameters.Add(parameters[i]);   
 
             lock (conLock)
             {
@@ -245,33 +273,20 @@ namespace CSUtil.DB
         public int Delete(string table, params SQLCondition[] conditionParams)
         {
             string str = "DELETE FROM " + table;
-            var parameters = GetParameters(ref str, conditionParams);
-
+            var parameters = GetWhereParameters(ref str, conditionParams);
             str += ";";
 
             MySqlCommand cmd = new MySqlCommand(str, con);
-
             for (int i = 0; i < parameters.Count; i++)
-            {
                 cmd.Parameters.Add(parameters[i]);
-            }
 
             lock (conLock)
-            {
                 return cmd.ExecuteNonQuery();
-            }
         }
 
-        static string ByteArrayToVarBinaryString(byte[] data)
-        {
-            return "0x" + BitConverter.ToString(data).Replace("-", "");
-        }
+        static string ByteArrayToVarBinaryString(byte[] data) => "0x" + BitConverter.ToString(data).Replace("-", "");
 
-        public int Update<T>(T value, string table, params SQLCondition[] conditionsParams)
-        {
-            return Update(value, table, null, conditionsParams);
-        }
-
+        public int Update<T>(T value, string table, params SQLCondition[] conditionsParams) => Update(value, table, null, conditionsParams);
         public int Update<T>(T value, string table, List<PropertyInfo> fields, params SQLCondition[] conditionsParams)
         {
             List<MySqlParameter> parameters = new List<MySqlParameter>();
@@ -281,53 +296,23 @@ namespace CSUtil.DB
 
             for (int i = 0; i < fields.Count; i++)
             {
-                bool raw = false;
-                string valueStr = "";
-                if(fields[i].PropertyType == typeof(DateTime))
-                {
-                    DateTime dt = (DateTime)fields[i].GetValue(value);
-                    valueStr = dt.ToString("yyyy-MM-dd hh:mm:ss");
-                }
-                else if (fields[i].PropertyType == typeof(System.Byte[]))
-                {
-                    valueStr = ByteArrayToVarBinaryString((byte[]) fields[i].GetValue(value) ?? new byte[] { } );
-                    raw = true;
-                }
-                else if (fields[i].PropertyType == typeof(bool))
-                {
-                    valueStr = (bool)fields[i].GetValue(value) ? "1" : "0";
-                }
-                else
-                {
-                    valueStr = fields[i].GetValue(value).ToString();
-                }
-
-                valueStr = MakeQuerySafe(valueStr);
-
+                var valueStr = GetProperty(fields[i], value);
                 
                 str += fields[i].Name;
-                if(raw)
-                    str += '=' + valueStr;
-                else
-                    str += "=\'" + valueStr + "\'";
+                str += '=' + valueStr;
 
                 if (i != fields.Count - 1)
                     str += ",";
             }
-            parameters.AddRange(GetParameters(ref str, conditionsParams));
+            parameters.AddRange(GetWhereParameters(ref str, conditionsParams));
             str += ";";
             
             MySqlCommand cmd = new MySqlCommand(str, con);
-
             for (int i = 0; i < parameters.Count; i++)
-            {
                 cmd.Parameters.Add(parameters[i]);
-            }
 
             lock (conLock)
-            {
                 return cmd.ExecuteNonQuery();
-            }
         }
 
         public int InsertArray<T>(T[] values, string table, List<PropertyInfo> fields = null)
@@ -358,19 +343,7 @@ namespace CSUtil.DB
                     str += "(";
                     for (int i = 0; i < fields.Count; i++)
                     {
-                        string s = "?c" + it++.ToString();
-                        str += s;
-                        MySqlParameter param;
-                        if (fields[i].GetValue(value).GetType() == typeof(byte[]))
-                        {
-                            param = new MySqlParameter(s, MySqlDbType.VarBinary);
-                            param.Value = fields[i].GetValue(value);
-                        }
-                        else
-                        {
-                            param = new MySqlParameter(s, fields[i].GetValue(value));
-                        }
-                        parameters.Add(param);
+                        parameters.Add(GetParameter(ref str, it++, fields[i].GetValue(value)));
 
                         if (i != fields.Count - 1)
                             str += ",";
@@ -389,27 +362,15 @@ namespace CSUtil.DB
             {
                 MySqlCommand cmd = new MySqlCommand(str, con);
                 for (int i = 0; i < parameters.Count; i++)
-                {
                     cmd.Parameters.Add(parameters[i]);
-                }
+                
                 return cmd.ExecuteNonQuery();
             }
         }
 
-        public int InsertData<T>(T value, string table, List<PropertyInfo> fields = null)
-        {
-            return InsertArray(new T[1] { value }, table, fields);
-        }
-
-        public List<T> GetData<T>(string table, params SQLCondition[] conditionsParams) where T : new()
-        {
-            return GetData<T>(table, "*", "", null, conditionsParams);
-        }
-
-        public List<T> GetData<T>(string table, string orderBy, params SQLCondition[] conditionParams) where T : new()
-        {
-            return GetData<T>(table, "*", orderBy, null, conditionParams);
-        }
+        public int InsertData<T>(T value, string table, List<PropertyInfo> fields = null) => InsertArray(new T[1] { value }, table, fields);
+        public List<T> GetData<T>(string table, params SQLCondition[] conditionsParams) where T : new() => GetData<T>(table, "*", "", null, conditionsParams);
+        public List<T> GetData<T>(string table, string orderBy, params SQLCondition[] conditionParams) where T : new() => GetData<T>(table, "*", orderBy, null, conditionParams);
 
         /// <summary>
         /// Wrapper for easier use of SendQuery function. 
@@ -422,25 +383,18 @@ namespace CSUtil.DB
         /// <returns>List of structs containing data from query</returns>
         public List<T> GetData<T>(string table, string queryFilter, string orderBy, List<PropertyInfo> fields, params SQLCondition[] conditionsParams) where T : new()
         {
-            List<MySqlParameter> parameters = new List<MySqlParameter>();
             string str = "SELECT " + queryFilter + " FROM " + table;
             str = MakeQuerySafe(str);
-
-            parameters = GetParameters(ref str, conditionsParams);
+            var parameters = GetWhereParameters(ref str, conditionsParams);
 
             if (orderBy.Length > 0)
-            {
                 str += " ORDER BY " + orderBy;
-            }
 
             str += ";";
 
             MySqlCommand cmd = new MySqlCommand(str, con);
-
             for (int i = 0; i < parameters.Count; i++)
-            {
-                cmd.Parameters.Add(parameters[i]);
-            }
+                cmd.Parameters.Add(parameters[i]);  
 
             return SendQuery<T>(cmd, fields);
         }
@@ -483,11 +437,26 @@ namespace CSUtil.DB
                     for (int i = 0; i < fields.Count; i++)
                     {
                         if (values[i].GetType() == typeof(DBNull))
+                        {
                             fields[i].SetValue(newT, null);
+                        }
                         else
-                            fields[i].SetValue(newT, values[i]);
-                    }
+                        {
+                            var val = values[i];
+                            var type = val.GetType();
+                            if (type != fields[i].PropertyType)
+                            {
+                                var converter = TypeDescriptor.GetConverter(fields[i].PropertyType);
+                                if (!converter.CanConvertFrom(type))
+                                    throw new ArgumentException($"Cannot convert from {type} to {fields[i].PropertyType}");
 
+                                val = converter.ConvertFrom(val);
+                            }
+                            
+                            fields[i].SetValue(newT, val);
+
+                        }
+                    }
                     ret.Add(newT);
                 }
                 rdr.Close();
@@ -499,9 +468,7 @@ namespace CSUtil.DB
         {
             MySqlCommand cmd = new MySqlCommand(query, con);
             lock (conLock)
-            {
                 cmd.ExecuteNonQuery();
-            }
         }
 
         bool CheckTableExists(string name)
@@ -525,7 +492,12 @@ namespace CSUtil.DB
 
         string GetDbTypeName(PropertyInfo info)
         {
-            if(info.PropertyType == typeof(string))
+            var dbType = info.PropertyType.GetCustomAttribute<CustomDbTypeAttribute>();
+            if(dbType != null)
+            {
+                return dbType.DbName;
+            }
+            else if(info.PropertyType == typeof(string))
             {
                 var attr = info.GetCustomAttribute<SQLSizeAttribute>();
                 if (attr != null)
@@ -541,6 +513,7 @@ namespace CSUtil.DB
                 else
                     return $"VARBINARY({attr.size})";
             }
+
             if(info.PropertyType == typeof(int) || info.PropertyType.IsEnum)
                 return "INT";
 
