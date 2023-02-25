@@ -369,8 +369,10 @@ namespace CSUtil.DB
         }
 
         public int InsertData<T>(T value, string table, List<PropertyInfo> fields = null) => InsertArray(new T[1] { value }, table, fields);
-        public List<T> GetData<T>(string table, params SQLCondition[] conditionsParams) where T : new() => GetData<T>(table, "*", "", null, conditionsParams);
-        public List<T> GetData<T>(string table, string orderBy, params SQLCondition[] conditionParams) where T : new() => GetData<T>(table, "*", orderBy, null, conditionParams);
+        public List<T> GetData<T>(string table, params SQLCondition[] conditionsParams) where T : new() => GetData<T>(table, "*", "", null, -1, conditionsParams);
+        public List<T> GetData<T>(string table, string orderBy, params SQLCondition[] conditionParams) where T : new() => GetData<T>(table, "*", orderBy, null, -1, conditionParams);
+        public List<T> GetDataLimit<T>(string table, int limit, params SQLCondition[] conditionParams) where T : new() => GetData<T>(table, "*", "", null, limit, conditionParams);
+        public List<T> GetDataLimit<T>(string table, string orderBy, int limit, params SQLCondition[] conditionParams) where T : new() => GetData<T>(table, "*", orderBy, null, limit, conditionParams);
 
         /// <summary>
         /// Wrapper for easier use of SendQuery function. 
@@ -381,14 +383,17 @@ namespace CSUtil.DB
         /// <param name="queryFilter">Filter for query, example: "*" for all, "(p1, p2)" for columns p1 and p2</param>
         /// <param name="fields">Fields to populate in the struct, leave null to auto populate</param>
         /// <returns>List of structs containing data from query</returns>
-        public List<T> GetData<T>(string table, string queryFilter, string orderBy, List<PropertyInfo> fields, params SQLCondition[] conditionsParams) where T : new()
+        public List<T> GetData<T>(string table, string queryFilter, string orderBy, List<PropertyInfo> fields, int limit, params SQLCondition[] conditionsParams) where T : new()
         {
             string str = "SELECT " + queryFilter + " FROM " + table;
             str = MakeQuerySafe(str);
             var parameters = GetWhereParameters(ref str, conditionsParams);
 
-            if (orderBy.Length > 0)
+            if (!string.IsNullOrEmpty(orderBy))
                 str += " ORDER BY " + orderBy;
+
+            if (limit > 0)
+                str += " LIMIT " + limit.ToString();
 
             str += ";";
 
