@@ -449,7 +449,7 @@ namespace CSUtil.DB
                         {
                             var val = values[i];
                             var type = val.GetType();
-                            if (type != fields[i].PropertyType)
+                            if (type != fields[i].PropertyType && !fields[i].PropertyType.IsEnum)
                             {
                                 var converter = TypeDescriptor.GetConverter(fields[i].PropertyType);
                                 if (!converter.CanConvertFrom(type))
