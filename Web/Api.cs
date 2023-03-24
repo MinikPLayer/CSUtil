@@ -12,8 +12,8 @@ namespace CSUtil.Web
     public static class Api
     {
         private static readonly HttpClient client = new HttpClient();
-        static string baseUrl = "http://127.0.0.1";
-        static int port = 56789;
+        public static string baseUrl = "http://localhost";
+        public static int port = 56789;
         public class Param
         {
             public string name { get; set; } = "";
@@ -38,10 +38,7 @@ namespace CSUtil.Web
             builder.Port = port;
             
             var query = HttpUtility.ParseQueryString(builder.Query);
-            
-            if(!string.IsNullOrEmpty(token))
-                query["token"] = token;
-            
+
             for(int i = 0;i<ps.Length;i++)
                 query[ps[i].name] = ps[i].value;
                 
@@ -62,6 +59,9 @@ namespace CSUtil.Web
             HttpResponseMessage ret;
             try
             {
+                if(token != null)
+                    msg.Headers.Add("Authorization", "Bearer " + token);
+
                 ret = await client.SendAsync(msg);
             }
             catch (HttpRequestException e)
