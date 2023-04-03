@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web;
+using CSUtil.Reflection;
 using Newtonsoft.Json;
 
 namespace CSUtil.Web
@@ -21,6 +22,7 @@ namespace CSUtil.Web
         }
 
         public static string token = "";
+        public static event Func<Task<bool>>? OnTokenExpired;
 
         public static Param ToApiParam<T>(this string s, T value)
         {
@@ -54,7 +56,40 @@ namespace CSUtil.Web
             return JsonConvert.DeserializeObject<T>(value);
         }
 
-        static async Task<ApiResult<T>> Send<T>(HttpRequestMessage msg)
+        static async Task<HttpRequestMessage> Clone(this HttpRequestMessage req, bool cloneContent = true, bool cloneOptions = true, bool cloneHeaders = true)
+        {
+            HttpRequestMessage clone = new HttpRequestMessage(req.Method, req.RequestUri);
+
+            if (cloneContent)
+            {
+                // Copy the request's content (via a MemoryStream) into the cloned object
+                var ms = new MemoryStream();
+                if (req.Content != null)
+                {
+                    await req.Content.CopyToAsync(ms).ConfigureAwait(false);
+                    ms.Position = 0;
+                    clone.Content = new StreamContent(ms);
+
+                    // Copy the content headers
+                    foreach (var h in req.Content.Headers)
+                        clone.Content.Headers.Add(h.Key, h.Value);
+                }
+            }
+
+            clone.Version = req.Version;
+
+            if (cloneOptions)
+                foreach (KeyValuePair<string, object?> option in req.Options)
+                    clone.Options.Set(new HttpRequestOptionsKey<object?>(option.Key), option.Value);
+            
+            if(cloneHeaders)
+                foreach (KeyValuePair<string, IEnumerable<string>> header in req.Headers)
+                    clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+
+            return clone;
+        }
+
+        static async Task<ApiResult<T>> Send<T>(HttpRequestMessage msg, bool allowRetry = true)
         {
             HttpResponseMessage ret;
             try
@@ -73,8 +108,14 @@ namespace CSUtil.Web
             }
 
             var outString = await ret.Content.ReadAsStringAsync();
-            if(!ret.IsSuccessStatusCode)
-                return new ApiResult<T>(ret.StatusCode, outString);
+            if (!ret.IsSuccessStatusCode)
+            {
+                var result = new ApiResult<T>(ret.StatusCode, outString);
+                if (allowRetry && result.IsExpired() && OnTokenExpired != null && await OnTokenExpired())
+                    return await Send<T>(await msg.Clone(cloneHeaders: false), false);
+
+                return result;
+            }
                 
             var outValue = ConvertToValue<T>(outString);
             return new ApiResult<T>(outValue);
@@ -99,6 +140,12 @@ namespace CSUtil.Web
         };
         public static string GetErrorCodesMeaning<T>(ApiResult<T> ret, string defaultMessage = "?", params (HttpStatusCode code, string text)[] customDict)
         {
+            if (ret.IsExpired())
+                return "Token expired";
+
+            if (ret.IsInvalidated())
+                return "Token invalidated";
+
             if(!string.IsNullOrEmpty(ret.Message))
                 return ret.Message;
         

@@ -1,4 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
 using System.Net;
 
 namespace CSUtil.Web
@@ -9,15 +11,17 @@ namespace CSUtil.Web
         public string? Message = null;
         public T? Payload;
 
-        public static implicit operator bool(ApiResult<T> ret) => ret.StatusCode == HttpStatusCode.OK;
+        public static explicit operator bool(ApiResult<T> ret) => ret.IsOk();
 
         public static implicit operator ActionResult(ApiResult<T> ret)
         {
-            if (ret)
+            if ((bool)ret)
                 return new ObjectResult(ret.Message) { StatusCode = (int)ret.StatusCode };
 
             return new ObjectResult(ret.Message) { StatusCode = (int)ret.StatusCode };
         }
+
+        public bool IsOk() => this.StatusCode == HttpStatusCode.OK;
 
         /// <summary>
         /// For failures only
@@ -38,5 +42,7 @@ namespace CSUtil.Web
             Message = message;
             Payload = payload;
         }
+
+        public override int GetHashCode() => HashCode.Combine(StatusCode, Message, Payload);
     }
 }
