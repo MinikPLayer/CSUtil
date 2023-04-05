@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text;
 using System.Threading.Tasks;
 using System.Web;
 using CSUtil.Reflection;
@@ -124,6 +126,13 @@ namespace CSUtil.Web
         public static async Task<ApiResult<T>> Post<T>(string path, params Param[] ps)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, GetURL(path, ps));
+            return await Send<T>(request);
+        }
+
+        public static async Task<ApiResult<T>> PostContent<T>(string path, string content, params Param[] ps)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, GetURL(path, ps));
+            request.Content = JsonContent.Create(content);
             return await Send<T>(request);
         }
 
