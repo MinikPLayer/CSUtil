@@ -86,13 +86,19 @@ namespace CSUtil.OS
             throw new NotSupportedException("Platform not supported");
         }
 
-        public static async void _RunIfNotAvalonia(Action runFunc)
+        public static async Task<bool> IsAvalonia()
         {
 #if DEBUG
             var parentName = await GetParentName();
-            if (parentName.Contains("java"))
-                return;
+            return parentName.Contains("java");
 #endif
+            return false;
+        }
+        
+        public static async Task _RunIfNotAvalonia(Action runFunc)
+        {
+            if (await IsAvalonia())
+                return;
 
             runFunc();
         }
