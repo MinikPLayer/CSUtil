@@ -22,7 +22,9 @@ namespace CSUtil.Reflection
                 {
                     if (t1p[i].Name == t2p[j].Name && t1p[i].PropertyType == t2p[j].PropertyType)
                     {
-                        t2p[j].SetValue(dest, t1p[i].GetValue(source));
+                        if(t2p[j].CanWrite && t1p[i].CanRead)
+                            t2p[j].SetValue(dest, t1p[i].GetValue(source));
+                        
                         break;
                     }
                 }
@@ -47,10 +49,9 @@ namespace CSUtil.Reflection
                 {
                     if (t1p[i].Name == t2p[j].Name && t1p[i].PropertyType == t2p[j].PropertyType)
                     {
-                        for (int k = 0; k < source.Count; k++)
-                        {
-                            t2p[j].SetValue(dest[k], t1p[i].GetValue(source[k]));
-                        }
+                        if(t2p[j].CanWrite && t1p[i].CanRead)
+                            for (int k = 0; k < source.Count; k++)
+                                t2p[j].SetValue(dest[k], t1p[i].GetValue(source[k]));
 
                         break;
                     }
@@ -72,8 +73,11 @@ namespace CSUtil.Reflection
                 {
                     if (t1p[i].Name == t2p[j].Name && t1p[i].PropertyType == t2p[j].PropertyType)
                     {
-                        copiedCount++;
-                        t2p[j].SetValue(dest, t1p[i].GetValue(source));
+                        if (t2p[j].CanWrite && t1p[i].CanRead)
+                        {
+                            t2p[j].SetValue(dest, t1p[i].GetValue(source));
+                            copiedCount++;
+                        }
                         break;
                     }
                 }
@@ -99,12 +103,12 @@ namespace CSUtil.Reflection
                 {
                     if (t1p[i].Name == t2p[j].Name && t1p[i].PropertyType == t2p[j].PropertyType)
                     {
-                        copiedCount++;
-                        for (int k = 0; k < source.Count; k++)
+                        if (t2p[j].CanWrite && t1p[i].CanRead)
                         {
-                            t2p[j].SetValue(dest[k], t1p[i].GetValue(source[k]));
+                            copiedCount++;
+                            for (int k = 0; k < source.Count; k++)
+                                t2p[j].SetValue(dest[k], t1p[i].GetValue(source[k]));
                         }
-
                         break;
                     }
                 }
@@ -116,12 +120,14 @@ namespace CSUtil.Reflection
         public static int CopySingle<T1>(T1 source, T1 dest)
         {
             var t1p = GetProperties<T1>();
-
             int copiedCount = 0;
             for (int i = 0; i < t1p.Length; i++)
             {
-                t1p[i].SetValue(dest, t1p[i].GetValue(source));
-                copiedCount++;
+                if (t1p[i].CanWrite && t1p[i].CanRead)
+                {
+                    t1p[i].SetValue(dest, t1p[i].GetValue(source));
+                    copiedCount++;
+                }
             }
 
             return copiedCount;
