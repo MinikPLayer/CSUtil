@@ -90,7 +90,9 @@ namespace CSUtil.OS
         {
 #if DEBUG
             var parentName = await GetParentName();
-            return parentName.Contains("java");
+            var isAval = parentName.Contains("java");
+            Console.WriteLine($"IsAvalonia: {isAval}");
+            Debug.WriteLine($"IsAvalonia: {isAval}");
 #endif
             return false;
         }
