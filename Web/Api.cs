@@ -14,7 +14,7 @@ namespace CSUtil.Web
 {
     public static class Api
     {
-        private static readonly HttpClient client = new HttpClient();
+        public static HttpClient client = new HttpClient();
         public static string baseUrl = "localhost";
         public static int port = 56789;
         public class Param
