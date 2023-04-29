@@ -35,7 +35,7 @@ namespace CSUtil.Web
             };
         }
 
-        static Uri GetURL(string path, params Param[] ps)
+        public static Uri GetURL(string path, params Param[] ps)
         {
             string address = baseUrl.TrimEnd('/') + "/" + path;
             var builder = new UriBuilder(address);
@@ -96,9 +96,9 @@ namespace CSUtil.Web
             HttpResponseMessage ret;
             try
             {
-                if(token != null)
-                    msg.Headers.Add("Authorization", "Bearer " + token);
-
+                if (token != null)
+                    msg.Headers.Add("Authorization", "Token " + token);
+                
                 ret = await client.SendAsync(msg);
             }
             catch (HttpRequestException e)
