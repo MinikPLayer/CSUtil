@@ -8,7 +8,7 @@ namespace CSUtil.Logging
     public static class Log
     {
         static bool showDebugConsole = false;
-        static bool showConsle = false;
+        static bool showConsole = false;
         static Log()
         {
 #if DEBUG
@@ -21,7 +21,7 @@ namespace CSUtil.Logging
         public static void ConfigureLogs(bool showDebug, bool showConsole)
         {
             Log.showDebugConsole = showDebug;
-            Log.showConsle = showConsole;
+            Log.showConsole = showConsole;
         }
 
         public static void Normal(object data, bool newLine = true, ConsoleColor color = ConsoleColor.White, [CallerMemberName] string callerName = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int lineNumber = -1)
@@ -35,7 +35,7 @@ namespace CSUtil.Logging
                 System.Diagnostics.Debug.Write(str);
             }
             
-            if(showConsle)
+            if(showConsole)
             {
                 var bClr = Console.ForegroundColor;
                 Console.ForegroundColor = color;
