@@ -680,7 +680,7 @@ namespace CSUtil.DB
             return IsAlive;
         }
 
-        public bool Connect(string username, string password, string dbName, string ip = "localhost", int port = 3306)
+        public bool Connect(string username, string password, string dbName, string ip = "localhost", string port = "3306")
         {
             return Connect("server=" + ip + ";user=" + username + ";database=" + dbName + ";port=" + port.ToString() + ";password=" + password);
         }
