@@ -8,6 +8,7 @@ using CSUtil.Logging;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using System.ComponentModel;
+using System.Data.SqlTypes;
 
 namespace CSUtil.DB
 {
@@ -95,7 +96,7 @@ namespace CSUtil.DB
             public const string J_OR = "OR";
         }
 
-        public static bool IsTypeEqual(Type dbType, Type localType)
+        public static bool IsTypeEqual(Type dbType, Type localType, bool dbTypeNullable)
         {
             var customType = localType.GetCustomAttribute<CustomDbTypeAttribute>();
             if (customType != null)
@@ -104,6 +105,14 @@ namespace CSUtil.DB
             }
             else
             {
+                if(dbTypeNullable)
+                {
+                    if (Nullable.GetUnderlyingType(localType) is not Type t)
+                        return false;
+
+                    localType = t;
+                }
+
                 return (dbType == typeof(int) && localType.IsEnum) || dbType == localType;
             }
         }
@@ -206,7 +215,7 @@ namespace CSUtil.DB
                 bool found = false;
                 for (int j = 0; j < fields.Count; j++)
                 {
-                    if (IsTypeEqual(type, fields[j].PropertyType) && fields[j].Name == name)
+                    if (IsTypeEqual(type, fields[j].PropertyType, (bool)schema[i].AllowDBNull) && fields[j].Name == name)
                     {
                         found = true;
                         if (!Attribute.IsDefined(fields[j], typeof(SQLIgnoreAttribute)))
@@ -495,14 +504,13 @@ namespace CSUtil.DB
             return good;
         }
 
-        string GetDbTypeName(PropertyInfo info)
+        string GetDbTypeName(Type type, PropertyInfo info)
         {
-            var dbType = info.PropertyType.GetCustomAttribute<CustomDbTypeAttribute>();
-            if(dbType != null)
-            {
+            var dbType = type.GetCustomAttribute<CustomDbTypeAttribute>();
+            if (dbType != null)
                 return dbType.DbName;
-            }
-            else if(info.PropertyType == typeof(string))
+
+            if (type == typeof(string))
             {
                 var attr = info.GetCustomAttribute<SQLSizeAttribute>();
                 if (attr != null)
@@ -510,7 +518,7 @@ namespace CSUtil.DB
                 else
                     return "TEXT";
             }
-            if(info.PropertyType == typeof(byte[]))
+            if (type == typeof(byte[]))
             {
                 var attr = info.GetCustomAttribute<SQLSizeAttribute>();
                 if (attr == null)
@@ -519,26 +527,44 @@ namespace CSUtil.DB
                     return $"VARBINARY({attr.size})";
             }
 
-            if(info.PropertyType == typeof(int) || info.PropertyType.IsEnum)
+            if (type == typeof(int) || type.IsEnum)
                 return "INT";
 
-            if (info.PropertyType == typeof(long))
+            if (type == typeof(long))
                 return "BIGINT";
 
-            if (info.PropertyType == typeof(float))
+            if (type == typeof(float))
                 return "FLOAT";
 
-            if (info.PropertyType == typeof(double))
+            if (type == typeof(double))
                 return "DOUBLE";
 
-            if(info.PropertyType == typeof(TimeSpan))
+            if (type == typeof(TimeSpan))
                 return "TIME";
 
 
-            if (info.PropertyType.IsArray)
+            if (type.IsArray)
                 throw new Exception("Arrays other than byte[] are not yet supported");
 
-            return info.PropertyType.Name.ToUpper();
+            return type.Name.ToUpper();
+        }
+
+        string GetDbTypeName(PropertyInfo info, bool nullability = false)
+        {
+            Type type;
+            string nullStr;
+            if (Nullable.GetUnderlyingType(info.PropertyType) is Type t)
+            {
+                type = t;
+                nullStr = " NULL";
+            }
+            else
+            {
+                type = info.PropertyType;
+                nullStr = " NOT NULL";
+            }
+
+            return GetDbTypeName(type, info) + (nullability ? nullStr : "");
         }
 
         public string GetPrimaryKey(string table)
@@ -587,7 +613,7 @@ namespace CSUtil.DB
                         if (properties[j].GetCustomAttribute<SQLPrimaryAttribute>() != null)
                             primary = properties[j].Name;
 
-                        cText += "`" + properties[j].Name + "` " + GetDbTypeName(properties[j]);
+                        cText += "`" + properties[j].Name + "` " + GetDbTypeName(properties[j], true);
                         if (j != properties.Count - 1)
                             cText += ", ";
                     }
@@ -632,7 +658,7 @@ namespace CSUtil.DB
                     for (int k = 0; k < columns.Count;k++)
                     {
                         var col = columns[k];
-                        if(IsTypeEqual(col.DataType, prop.PropertyType) &&
+                        if(IsTypeEqual(col.DataType, prop.PropertyType, (bool)col.AllowDBNull) &&
                             col.ColumnName == prop.Name)
                         {
                             found = true;
@@ -643,7 +669,7 @@ namespace CSUtil.DB
                     if(!found)
                     {
                         Log.Normal($"\t\tAdding column `{prop.Name}` to `{tableName}`...");
-                        MySqlCommand c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD `{prop.Name}` {GetDbTypeName(prop)};", con);
+                        MySqlCommand c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD `{prop.Name}` {GetDbTypeName(prop, true)};", con);
                         c.ExecuteNonQuery();
                     }
                 }
