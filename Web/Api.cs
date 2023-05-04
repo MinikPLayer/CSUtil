@@ -24,6 +24,7 @@ namespace CSUtil.Web
         }
 
         public static string token = "";
+        public static string userIdentifier = "";
         public static event Func<Task<bool>>? OnTokenExpired;
 
         public static Param ToApiParam<T>(this string s, T value)
