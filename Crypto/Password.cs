@@ -1,4 +1,5 @@
-﻿using PWDTK_NETCore;
+﻿using NUnit.Framework;
+using PWDTK_NETCore;
 using System;
 using System.Buffers.Text;
 using System.Collections.Generic;
@@ -57,5 +58,23 @@ namespace CSUtil.Crypto
             return true;
         }
 
+    }
+
+    public class PasswordTests
+    {
+        [Test]
+        public void TestSalted()
+        {
+            var passString = Password.GenerateToken(128);
+            var pass = Password.GetPasswordHash(passString);
+
+            Assert.That(pass.hash, Is.Not.Null);
+            Assert.That(pass.salt, Is.Not.Null);
+
+            Assert.That(pass.salt.Length, Is.EqualTo(Password.saltLength));
+
+            var zeros = new byte[pass.salt.Length];
+            Assert.That(pass.salt, Is.Not.EqualTo(zeros));
+        }
     }
 }
