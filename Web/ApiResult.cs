@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -44,5 +45,32 @@ namespace CSUtil.Web
         }
 
         public override int GetHashCode() => HashCode.Combine(StatusCode, Message, Payload);
+    }
+
+    public class ApiResultTests
+    {
+        public static IEnumerable<object[]> GetTestsSources()
+        {
+            yield return new object[] { new ApiResult<string>("123"), true };
+            yield return new object[] { new ApiResult<string>("abcdefg"), true };
+            yield return new object[] { new ApiResult<string>(HttpStatusCode.Unauthorized, ""), false };
+            yield return new object[] { new ApiResult<string>(HttpStatusCode.OK, ""), true };
+        }
+
+        [Test]
+        [TestCaseSource(nameof(GetTestsSources))]
+        public void IsOk(ApiResult<string> ret1, bool isOk) => Assert.That(ret1.IsOk(), Is.EqualTo(isOk));
+
+        [Test]
+        public void AsCasting()
+        {
+            var r1 = new ApiResult<string>(HttpStatusCode.AlreadyReported, "123");
+            var r2 = r1.As<int>();
+
+            Assert.That(r1.StatusCode, Is.EqualTo(r2.StatusCode));
+            Assert.That(r1.Message, Is.EqualTo(r2.Message));
+
+            Assert.That(r2.Payload, Is.EqualTo(default(int)));
+        }
     }
 }
