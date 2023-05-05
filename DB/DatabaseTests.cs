@@ -55,7 +55,11 @@ namespace CSUtil.DB
         public void Setup()
         {
             db = new Database();
-            Assert.That(db.Connect("csutil_test", "csutil_test", "csutil_test"), Is.True);
+            string port = "3306";
+            if(Environment.GetEnvironmentVariable("CSUTIL_TEST_DB_PORT_OVERRIDE") is string portOverride)
+                port = portOverride;
+
+            Assert.That(db.Connect("csutil_test", "csutil_test", "csutil_test", port: port), Is.True);
             try
             {
                 DatabaseManager.DropStructure(db, Assembly.GetAssembly(typeof(TestClass)));

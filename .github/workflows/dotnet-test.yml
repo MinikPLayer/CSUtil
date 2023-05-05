@@ -9,6 +9,9 @@ on:
   pull_request:
     branches: "**"
 
+env:
+    CSUTIL_TEST_DB_PORT_OVERRIDE: "23484"
+
 jobs:
   build:
 
@@ -27,7 +30,7 @@ jobs:
 
     steps:
     - name: Verify unittest DB exists
-      run: mysql --host 127.0.0.1 --port $UNOPLANNER_MYSQL_PORT -uroot -e "SHOW DATABASES LIKE 'csutil_test'"
+      run: mysql --host 127.0.0.1 --port $CSUTIL_TEST_DB_PORT_OVERRIDE -uroot -e "SHOW DATABASES LIKE 'csutil_test'"
     - uses: actions/checkout@v3
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
