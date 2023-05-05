@@ -130,7 +130,7 @@ namespace CSUtil.Web
             return await Send<T>(request);
         }
 
-        public static async Task<ApiResult<T>> PostContent<T>(string path, string content, params Param[] ps)
+        public static async Task<ApiResult<T>> PostContent<T, T2>(string path, T2 content, params Param[] ps)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, GetURL(path, ps));
             request.Content = JsonContent.Create(content);

@@ -117,14 +117,17 @@ namespace CSUtil.DB
             }
         }
 
-        public MySqlParameter GetParameter(ref string str, int index, object value)
+        public MySqlParameter GetParameter(ref string str, int index, object? value)
         {
             string s = "?c" + index.ToString();
             str += s;
 
             MySqlParameter param;
+            if (value == null)
+                return new MySqlParameter(s, DBNull.Value);
+
             var customAttr = value.GetType().GetCustomAttribute<CustomDbTypeAttribute>();
-            if(customAttr != null)
+            if (customAttr != null)
             {
                 param = new MySqlParameter(s, value.ToString());
             }
