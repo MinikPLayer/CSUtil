@@ -148,7 +148,7 @@ namespace CSUtil.DB
             return param;
         }
 
-        public List<MySqlParameter> GetWhereParameters(ref string str, SQLCondition[] conditions)
+        public List<MySqlParameter> GetWhereParameters(ref string str, SQLCondition[] conditions, int startIndex = 0)
         {
             List<MySqlParameter> parameters = new List<MySqlParameter>();
             if (conditions.Length > 0)
@@ -173,8 +173,9 @@ namespace CSUtil.DB
                         _ => "=",
                     };
 
-                    var param = GetParameter(ref str, i, conditions[i].value);
-                    parameters.Add(param);
+                    if (conditions[i].type != SQLCondition.ConditionTypes.IsNull && conditions[i].type != SQLCondition.ConditionTypes.IsNotNull)
+                        parameters.Add(GetParameter(ref str, startIndex + i, conditions[i].value));
+                    
                 }
             }
 
@@ -229,33 +230,6 @@ namespace CSUtil.DB
             return returnFields;
         }
 
-        string GetProperty<T>(PropertyInfo prop, T value)
-        {
-            bool raw = false;
-            string valueStr;
-            if (prop.PropertyType == typeof(DateTime))
-            {
-                DateTime dt = (DateTime)prop.GetValue(value);
-                valueStr = dt.ToString("yyyy-MM-dd hh:mm:ss");
-            }
-            else if (prop.PropertyType == typeof(byte[]))
-            {
-                valueStr = ByteArrayToVarBinaryString((byte[])prop.GetValue(value) ?? new byte[] { });
-                raw = true;
-            }
-            else if (prop.PropertyType == typeof(bool))
-            {
-                valueStr = (bool)prop.GetValue(value) ? "1" : "0";
-            }
-            else
-            {
-                valueStr = prop.GetValue(value).ToString();
-            }
-
-            valueStr = MakeQuerySafe(valueStr);
-            return raw ? valueStr : "\"" + valueStr + "\"";
-        }
-
         public int Count(string table, params SQLCondition[] conditions)
         {
             string str = $"SELECT COUNT(*) FROM {table}";
@@ -290,8 +264,6 @@ namespace CSUtil.DB
                 return cmd.ExecuteNonQuery();
         }
 
-        static string ByteArrayToVarBinaryString(byte[] data) => "0x" + BitConverter.ToString(data).Replace("-", "");
-
         public int Update<T>(T value, string table, params SQLCondition[] conditionsParams) => Update(value, table, null, conditionsParams);
         public int Update<T>(T value, string table, List<PropertyInfo> fields, params SQLCondition[] conditionsParams)
         {
@@ -300,17 +272,16 @@ namespace CSUtil.DB
             if (fields == null)
                 fields = GetProperties<T>(null);
 
+            int it = 0;
             for (int i = 0; i < fields.Count; i++)
             {
-                var valueStr = GetProperty(fields[i], value);
-                
-                str += fields[i].Name;
-                str += '=' + valueStr;
+                str += fields[i].Name + "=";
+                parameters.Add(GetParameter(ref str, it++, fields[i].GetValue(value)));
 
                 if (i != fields.Count - 1)
                     str += ",";
             }
-            parameters.AddRange(GetWhereParameters(ref str, conditionsParams));
+            parameters.AddRange(GetWhereParameters(ref str, conditionsParams, it));
             str += ";";
             
             MySqlCommand cmd = new MySqlCommand(str, con);
@@ -583,6 +554,14 @@ namespace CSUtil.DB
 
             rdr.Close();
             return ret;
+        }
+
+        public void DropTable(string table)
+        {
+            Log.Normal("Dropping table \"" + table + "\"...");
+            var c = new MySqlCommand($"DROP TABLE `{table}`;", con);
+            c.ExecuteNonQuery();
+            Log.Normal("Dropping table done");
         }
 
         public void CreateDBStruct(List<(string, Type)> tables)

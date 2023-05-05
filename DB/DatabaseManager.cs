@@ -19,13 +19,7 @@ namespace CSUtil.DB
 
     public static class DatabaseManager
     {
-        /// <summary>
-        /// Creates database structure
-        /// </summary>
-        /// <param name="db">Database structure</param>
-        /// <param name="assembly">Assembly to get SqlTableAttribute types from. Can be obtained using Assembly.GetExecutingAssembly()</param>
-        /// <exception cref="NullReferenceException"></exception>
-        public static void CreateStructure(Database db, Assembly assembly)
+        static List<(string table, Type type)> GetTableTypes(Database db, Assembly assembly)
         {
             if (db is null)
                 throw new NullReferenceException("Not initialized");
@@ -41,7 +35,32 @@ namespace CSUtil.DB
                 return (attr.TableName, x);
             }).Where(x => !string.IsNullOrEmpty(x.Item1)));
 
+            return tables;
+        }
+
+        /// <summary>
+        /// Creates database structure
+        /// </summary>
+        /// <param name="db">Database structure</param>
+        /// <param name="assembly">Assembly to get SqlTableAttribute types from. Can be obtained using Assembly.GetExecutingAssembly()</param>
+        /// <exception cref="NullReferenceException"></exception>
+        public static void CreateStructure(Database db, Assembly assembly)
+        {
+            var tables = GetTableTypes(db, assembly);
             db.CreateDBStruct(tables);
+        }
+
+        /// <summary>
+        /// Drops tables from database corresponding to SqlTableAttribute types in assembly
+        /// USE WITH CAUTION!
+        /// </summary>
+        /// <param name="db">Database structure</param>
+        /// <param name="assembly">Assembly to get SqlTableAttribute types from. Can be obtained using Assembly.GetExecutingAssembly()</param>
+        public static void DropStructure(Database db, Assembly assembly)
+        {
+            var tables = GetTableTypes(db, assembly);
+            foreach (var table in tables)
+                db.DropTable(table.table);
         }
     }
 }
