@@ -60,11 +60,15 @@ namespace CSUtil.DB
                 port = portOverride;
 
             Assert.That(db.Connect("csutil_test", "csutil_test", "csutil_test", port: port), Is.True);
-            try
-            {
-                DatabaseManager.DropStructure(db, Assembly.GetAssembly(typeof(TestClass)));
+
+            try 
+            { 
+                DatabaseManager.DropStructure(db, Assembly.GetAssembly(typeof(TestClass))); 
             }
-            catch (Exception) { }
+            catch (Exception) 
+            {
+                // Ignore
+            }
             
             DatabaseManager.CreateStructure(db, Assembly.GetAssembly(typeof(TestClass)));
         }
