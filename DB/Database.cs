@@ -80,7 +80,11 @@ namespace CSUtil.DB
                 Like,
                 NotLike,
                 IsNull,
-                IsNotNull
+                IsNotNull,
+                GreaterThan,
+                GreaterThanOrEqual,
+                LessThan,
+                LessThanOrEqual,
             }
 
             public ConditionTypes type;
@@ -156,28 +160,18 @@ namespace CSUtil.DB
                         str += " " + conditions[i].junctionOp + " ";
 
                     str += conditions[i].name;
-                    if (conditions[i].type == SQLCondition.ConditionTypes.Like)
+                    str += conditions[i].type switch
                     {
-                        str += " LIKE ";
-                    }
-                    else if (conditions[i].type == SQLCondition.ConditionTypes.NotLike)
-                    {
-                        str += " NOT LIKE ";
-                    }
-                    else if (conditions[i].type == SQLCondition.ConditionTypes.IsNull)
-                    {
-                        str += " IS NULL";
-                        continue;
-                    }
-                    else if (conditions[i].type == SQLCondition.ConditionTypes.IsNotNull)
-                    {
-                        str += " IS NOT NULL";
-                        continue;
-                    }
-                    else
-                    {
-                        str += "=";
-                    }
+                        SQLCondition.ConditionTypes.Like => " LIKE ",
+                        SQLCondition.ConditionTypes.NotLike => " NOT LIKE ",
+                        SQLCondition.ConditionTypes.IsNull => " IS NULL",
+                        SQLCondition.ConditionTypes.IsNotNull => " IS NOT NULL",
+                        SQLCondition.ConditionTypes.GreaterThan => " > ",
+                        SQLCondition.ConditionTypes.GreaterThanOrEqual => " >= ",
+                        SQLCondition.ConditionTypes.LessThan => " < ",
+                        SQLCondition.ConditionTypes.LessThanOrEqual => " <= ",
+                        _ => "=",
+                    };
 
                     var param = GetParameter(ref str, i, conditions[i].value);
                     parameters.Add(param);
@@ -513,9 +507,9 @@ namespace CSUtil.DB
             if (dbType != null)
                 return dbType.DbName;
 
+            var attr = info.GetCustomAttribute<SQLSizeAttribute>();
             if (type == typeof(string))
-            {
-                var attr = info.GetCustomAttribute<SQLSizeAttribute>();
+            {            
                 if (attr != null)
                     return "VARCHAR(" + attr.size.ToString() + ")";
                 else
@@ -523,33 +517,33 @@ namespace CSUtil.DB
             }
             if (type == typeof(byte[]))
             {
-                var attr = info.GetCustomAttribute<SQLSizeAttribute>();
                 if (attr == null)
                     throw new Exception("Size attribute is required for byte arrays");
                 else
                     return $"VARBINARY({attr.size})";
             }
 
+            var sizeName = attr == null ? "" : $"({attr.size})";
             if (type == typeof(int) || type.IsEnum)
-                return "INT";
+                return "INT" + sizeName;
 
             if (type == typeof(long))
-                return "BIGINT";
+                return "BIGINT" + sizeName;
 
             if (type == typeof(float))
-                return "FLOAT";
+                return "FLOAT" + sizeName;
 
             if (type == typeof(double))
-                return "DOUBLE";
+                return "DOUBLE" + sizeName;
 
             if (type == typeof(TimeSpan))
-                return "TIME";
+                return "TIME" + sizeName;
 
 
             if (type.IsArray)
                 throw new Exception("Arrays other than byte[] are not yet supported");
 
-            return type.Name.ToUpper();
+            return type.Name.ToUpper() + sizeName;
         }
 
         string GetDbTypeName(PropertyInfo info, bool nullability = false)
