@@ -10,7 +10,7 @@ on:
     branches: "**"
 
 env:
-    CSUTIL_TEST_DB_PORT_OVERRIDE: "23485"
+    CSUTIL_TEST_DB_PORT_OVERRIDE: "23480"
 
 jobs:
   build:
@@ -25,7 +25,7 @@ jobs:
             MYSQL_USER: csutil_test
             MYSQL_PASSWORD: csutil_test
         ports:
-            - 23485:3306
+            - 23480:3306
         options: --health-cmd="mysqladmin ping" --health-interval=3s --health-timeout=2s --health-retries=3
 
     steps:
