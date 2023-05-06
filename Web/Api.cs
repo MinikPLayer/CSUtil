@@ -29,10 +29,20 @@ namespace CSUtil.Web
 
         public static Param ToApiParam<T>(this string s, T value)
         {
+            string valueStr = "";
+            if (value != null)
+            {
+                valueStr = JsonConvert.SerializeObject(value);
+                if(valueStr.StartsWith('\"'))
+                    valueStr = valueStr.Substring(1);
+
+                if(valueStr.EndsWith('\"'))
+                    valueStr = valueStr.Substring(0, valueStr.Length - 1);
+            }
             return new Param()
             {
                 name = s,
-                value = value.ToString() ?? ""
+                value = valueStr
             };
         }
 
@@ -44,9 +54,9 @@ namespace CSUtil.Web
             
             var query = HttpUtility.ParseQueryString(builder.Query);
 
-            for(int i = 0;i<ps.Length;i++)
+            for (int i = 0; i < ps.Length; i++)
                 query[ps[i].name] = ps[i].value;
-                
+
             builder.Query = query.ToString() ?? "";
             return new Uri(builder.ToString());
         }
@@ -56,7 +66,7 @@ namespace CSUtil.Web
             if(typeof(T) == typeof(string))
                 return (T)Convert.ChangeType(value, typeof(T));
                 
-            return JsonConvert.DeserializeObject<T>(value);
+            return JsonConvert.DeserializeObject<T>(value, new JsonSerializerSettings() { TypeNameHandling = TypeNameHandling.Auto } );
         }
 
         static async Task<HttpRequestMessage> Clone(this HttpRequestMessage req, bool cloneContent = true, bool cloneOptions = true, bool cloneHeaders = true)
