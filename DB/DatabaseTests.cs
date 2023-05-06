@@ -22,7 +22,7 @@ namespace CSUtil.DB
             public string Name { get; set; } = "";
             public int? Number { get; set; } = null;
             [SQLSize(6)]
-            public DateTime? Date { get; set; } = DateTime.Now;
+            public DateTime? Date { get; set; } = DateTime.UtcNow;
 
             [SQLIgnore]
             public List<int> Tests { get; set; } = new List<int>();
