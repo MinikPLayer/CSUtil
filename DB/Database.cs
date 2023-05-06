@@ -221,10 +221,10 @@ namespace CSUtil.DB
                         break;
                     }
                 }
+
                 if (!found)
-                {
                     Console.WriteLine($"[WARNING] Cannot find property {name} in {tType.FullName}");
-                }
+                
             }
 
             return returnFields;
@@ -382,6 +382,29 @@ namespace CSUtil.DB
         }
 
         /// <summary>
+        /// Sends a raw SQL request, use ?c{i} to add a parameter, where i is the index of the parameter in the arguments array (for example ?c0, ?c1, ?c2, etc.)
+        /// </summary>
+        /// <typeparam name="T">Return type</typeparam>
+        /// <param name="sql">SQL command</param>
+        /// <param name="arguments">Parameters</param>
+        /// <returns>SQL returns</returns>
+        public List<T> RunSQL<T>(string sql, params object?[] arguments) where T : new()
+        {
+            var cmd = new MySqlCommand(sql, con);
+            for(var i = 0; i < arguments.Length; i++)
+            {
+                if(!sql.Contains($"?c{i}"))
+                    throw new ArgumentException("Sql doesn't contain reference to argument " + i);
+
+                cmd.Parameters.AddWithValue($"?c{i}", arguments[i]);
+            }
+
+            // MySQL automatically checks if sql parameters ?c{i} are included, so no need to check it here
+
+            return SendQuery<T>(cmd);
+        }
+
+        /// <summary>
         /// Sends query to databse and returns result
         /// </summary>
         /// <typeparam name="T">Type of result struct, it MUST match with DB table struct</typeparam>
@@ -400,15 +423,29 @@ namespace CSUtil.DB
             lock (conLock)
             {
                 MySqlDataReader rdr = cmd.ExecuteReader();
-
-                if (fields == null)
-                    fields = GetProperties<T>(rdr);
-
                 while (rdr.Read())
                 {
                     object[] values = new object[rdr.FieldCount];
                     // Get row
                     rdr.GetValues(values);
+
+                    // Check for single types (like int, string, etc)
+                    var tp = typeof(T);
+                    if (Nullable.GetUnderlyingType(tp) is Type t)
+                        tp = t;
+
+                    if (!tp.IsClass && tp.IsValueType && values.Length == 1)
+                    {
+                        var value = values[0];
+                        var lst = new List<T>
+                        {
+                            (T)Convert.ChangeType(value, tp)
+                        };
+                        return lst;
+                    }
+
+                    if (fields == null)
+                        fields = GetProperties<T>(rdr);
 
                     if (values.Length != fields.Count)
                     {

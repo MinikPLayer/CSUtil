@@ -76,7 +76,14 @@ namespace CSUtil.DB
         [TearDown]
         public void Teardown()
         {
-            DatabaseManager.DropStructure(db, Assembly.GetAssembly(typeof(TestClass)));
+            try
+            {
+                DatabaseManager.DropStructure(db, Assembly.GetAssembly(typeof(TestClass)));
+            }
+            catch(Exception)
+            {
+
+            }
         }
 
 
@@ -228,6 +235,50 @@ namespace CSUtil.DB
             // Not null
             var notNulledValues = db.GetData<TestClass>(TestClass.TABLE_NAME, nameof(TestClass.Number).SQLp("", Database.SQLCondition.ConditionTypes.IsNotNull));
             Assert.That(data, Is.EquivalentTo(notNulledValues));
+        }
+
+        [Test]  
+        public void JunctionOrTest()
+        {
+            var dbData = InsertArrayDB(500);
+            Assert.That(dbData.Count, Is.EqualTo(500));
+
+            var count = db.Count(TestClass.TABLE_NAME, nameof(TestClass.Id).SQLp(dbData[0].Id), nameof(TestClass.Id).SQLp(dbData[1].Id, junctionOp: "OR"));
+            Assert.That(count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void RawSqlTest()
+        {
+            var data = InsertArrayDB(500);
+            Assert.That(data.Count, Is.EqualTo(500));
+
+            var dbData = db.RunSQL<TestClass>($"SELECT * FROM {TestClass.TABLE_NAME};");
+            Assert.That(data, Is.EquivalentTo(dbData));
+
+            var dataWhere = data.Where(x => x.Id.StartsWith("4")).Concat(data.Where(x => x.Id.StartsWith("5")));
+            var dbDataWhere = db.RunSQL<TestClass>($"SELECT * FROM {TestClass.TABLE_NAME} WHERE {nameof(TestClass.Id)} LIKE '4%' OR {nameof(TestClass.Id)} LIKE '5%';");
+            Assert.That(dataWhere, Is.EquivalentTo(dbDataWhere));
+
+            // Parameters update check
+            db.RunSQL<object>($"UPDATE {TestClass.TABLE_NAME} SET {nameof(TestClass.Number)} = ?c0 WHERE {nameof(TestClass.Id)} = ?c1 OR {nameof(TestClass.Id)} LIKE ?c2", 1234, dbData[0].Id, "4%");
+            var matchingData = data.Where(x => x.Id == data[0].Id || x.Id.StartsWith("4"));
+            foreach (var item in matchingData)
+                item.Number = 1234;
+
+            dbData = db.RunSQL<TestClass>($"SELECT * FROM {TestClass.TABLE_NAME}");
+            Assert.That(data, Is.EquivalentTo(dbData));
+
+            var count = data.Count(x => x.Number == 1234);
+            var dbCount = db.RunSQL<long?>($"SELECT COUNT({nameof(TestClass.Id)}) FROM {TestClass.TABLE_NAME} WHERE {nameof(TestClass.Number)} = ?c0;", 1234).FirstOrDefault();
+            Assert.That(dbCount, Is.Not.Null);
+            Assert.That(count, Is.EqualTo(dbCount));
+
+            // No ?c0 and ?c1 parameters given
+            Assert.Throws<MySqlConnector.MySqlException>(() => db.RunSQL<object>($"UPDATE {TestClass.TABLE_NAME} SET {nameof(TestClass.Number)} = ?c0 WHERE {nameof(TestClass.Id)} LIKE ?c1"));
+
+            // Too much parameters given
+            Assert.Throws<ArgumentException>(() => db.RunSQL<object>($"UPDATE {TestClass.TABLE_NAME} SET {nameof(TestClass.Number)} = '1' WHERE {nameof(TestClass.Id)} LIKE 4%", 1, "4%"));
         }
     }
 }
