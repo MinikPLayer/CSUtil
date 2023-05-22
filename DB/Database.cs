@@ -26,6 +26,12 @@ namespace CSUtil.DB
         public SQLSizeAttribute(int size) { this.size = size; }
     }
 
+    public class SQLNullableAttribute : Attribute
+    {
+        public readonly bool Nullable;
+        public SQLNullableAttribute(bool nullable) { this.Nullable = nullable; }
+    }
+
     public class Database
     {
         MySqlConnection con = null;
@@ -100,9 +106,10 @@ namespace CSUtil.DB
             public const string J_OR = "OR";
         }
 
-        public static bool IsTypeEqual(Type dbType, Type localType, bool dbTypeNullable)
+        public static bool IsTypeEqual(Type dbType, PropertyInfo propInfo, bool dbTypeNullable)
         {
-            var customType = localType.GetCustomAttribute<CustomDbTypeAttribute>();
+            var localType = propInfo.PropertyType;
+            var customType = propInfo.GetCustomAttribute<CustomDbTypeAttribute>();
             if (customType != null)
             {
                 return customType.DbType == dbType;
@@ -111,10 +118,15 @@ namespace CSUtil.DB
             {
                 if(dbTypeNullable)
                 {
-                    if (Nullable.GetUnderlyingType(localType) is not Type t)
+                    var nullableAttribute = propInfo.GetCustomAttribute<SQLNullableAttribute>();
+                    if (Nullable.GetUnderlyingType(localType) is Type t)
+                    {
+                        localType = t;
+                    }
+                    else if (nullableAttribute == null || !nullableAttribute.Nullable)
+                    {
                         return false;
-
-                    localType = t;
+                    }
                 }
 
                 return (dbType == typeof(int) && localType.IsEnum) || dbType == localType;
@@ -213,7 +225,7 @@ namespace CSUtil.DB
                 bool found = false;
                 for (int j = 0; j < fields.Count; j++)
                 {
-                    if (IsTypeEqual(type, fields[j].PropertyType, (bool)schema[i].AllowDBNull) && fields[j].Name == name)
+                    if (IsTypeEqual(type, fields[j], (bool)schema[i].AllowDBNull) && fields[j].Name == name)
                     {
                         found = true;
                         if (!Attribute.IsDefined(fields[j], typeof(SQLIgnoreAttribute)))
@@ -294,6 +306,9 @@ namespace CSUtil.DB
 
         public int InsertArray<T>(T[] values, string table, List<PropertyInfo> fields = null)
         {
+            if (values.Length == 0)
+                return 0;
+            
             string str = "INSERT INTO " + table + "(";
             if (fields == null)
                 fields = GetProperties<T>(null);
@@ -455,6 +470,9 @@ namespace CSUtil.DB
                     T newT = new T();
                     for (int i = 0; i < fields.Count; i++)
                     {
+                        if (!fields[i].CanWrite)
+                            continue;
+                            
                         if (values[i].GetType() == typeof(DBNull))
                         {
                             fields[i].SetValue(newT, null);
@@ -558,9 +576,18 @@ namespace CSUtil.DB
         {
             Type type;
             string nullStr;
-            if (Nullable.GetUnderlyingType(info.PropertyType) is Type t)
+
+            var nullableAtrribute =
+                info.GetCustomAttributes().OfType<SQLNullableAttribute>().FirstOrDefault();
+
+            if (Nullable.GetUnderlyingType(info.PropertyType) is Type t && (nullableAtrribute == null || nullableAtrribute.Nullable != false))
             {
                 type = t;
+                nullStr = " NULL";
+            }
+            else if (nullableAtrribute != null && nullableAtrribute.Nullable == true)
+            {
+                type = info.PropertyType;
                 nullStr = " NULL";
             }
             else
@@ -671,7 +698,7 @@ namespace CSUtil.DB
                     for (int k = 0; k < columns.Count;k++)
                     {
                         var col = columns[k];
-                        if(IsTypeEqual(col.DataType, prop.PropertyType, (bool)col.AllowDBNull) &&
+                        if(IsTypeEqual(col.DataType, prop, (bool)col.AllowDBNull) &&
                             col.ColumnName == prop.Name)
                         {
                             found = true;

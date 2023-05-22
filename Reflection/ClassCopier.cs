@@ -9,7 +9,7 @@ namespace CSUtil.Reflection
 {
     public static class ClassCopier
     {
-        static PropertyInfo[] GetProperties<T>()
+        public static PropertyInfo[] GetProperties<T>()
         {
             return typeof(T).GetProperties();
         }

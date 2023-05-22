@@ -137,6 +137,14 @@ namespace CSUtil.DB
         public void InsertArray() => InsertArrayDB(500);
 
         [Test]
+        public void InsertEmptyArray()
+        {
+            // Test should pass with no exceptions, but no data should be inserted
+            var count = db.InsertArray(Array.Empty<int>(), "test");
+            Assert.That(count, Is.EqualTo(0));
+        }
+        
+        [Test]
         public void UpdateData()
         {
             var dbData = InsertArrayDB(500);
