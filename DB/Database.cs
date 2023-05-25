@@ -34,16 +34,34 @@ namespace CSUtil.DB
 
     public class Database
     {
-        MySqlConnection con = null;
-        object conLock = new object();
+        private MySqlConnection? _con;
 
-        public bool IsAlive
+        private MySqlConnection Con
         {
             get
             {
-                if (con == null)
+                if (_con == null)
+                    throw new NullReferenceException("Database connection not initialized");
+
+                if (!IsAlive)
+                {
+                    if(!Connect(_con.ConnectionString))
+                        throw new Exception("Database connection failed");
+                }
+
+                return _con;
+            }
+        }
+        object conLock = new object();
+
+        bool IsAlive
+        {
+            get
+            {
+                if (_con == null)
                     return false;
-                return !(con.State == ConnectionState.Closed || con.State == ConnectionState.Broken || con.State == ConnectionState.Connecting);
+                
+                return !(_con.State == ConnectionState.Closed || _con.State == ConnectionState.Broken || _con.State == ConnectionState.Connecting);
             }
         }
 
@@ -248,7 +266,7 @@ namespace CSUtil.DB
             var parameters = GetWhereParameters(ref str, conditions);
             str += ";";
 
-            MySqlCommand cmd = new MySqlCommand(str, con);
+            MySqlCommand cmd = new MySqlCommand(str, Con);
             for (int i = 0; i < parameters.Count; i++)
                 cmd.Parameters.Add(parameters[i]);   
 
@@ -268,7 +286,7 @@ namespace CSUtil.DB
             var parameters = GetWhereParameters(ref str, conditionParams);
             str += ";";
 
-            MySqlCommand cmd = new MySqlCommand(str, con);
+            MySqlCommand cmd = new MySqlCommand(str, Con);
             for (int i = 0; i < parameters.Count; i++)
                 cmd.Parameters.Add(parameters[i]);
 
@@ -296,7 +314,7 @@ namespace CSUtil.DB
             parameters.AddRange(GetWhereParameters(ref str, conditionsParams, it));
             str += ";";
             
-            MySqlCommand cmd = new MySqlCommand(str, con);
+            MySqlCommand cmd = new MySqlCommand(str, Con);
             for (int i = 0; i < parameters.Count; i++)
                 cmd.Parameters.Add(parameters[i]);
 
@@ -352,7 +370,7 @@ namespace CSUtil.DB
 
             lock (conLock)
             {
-                MySqlCommand cmd = new MySqlCommand(str, con);
+                MySqlCommand cmd = new MySqlCommand(str, Con);
                 for (int i = 0; i < parameters.Count; i++)
                     cmd.Parameters.Add(parameters[i]);
                 
@@ -389,7 +407,7 @@ namespace CSUtil.DB
 
             str += ";";
 
-            MySqlCommand cmd = new MySqlCommand(str, con);
+            MySqlCommand cmd = new MySqlCommand(str, Con);
             for (int i = 0; i < parameters.Count; i++)
                 cmd.Parameters.Add(parameters[i]);  
 
@@ -405,7 +423,7 @@ namespace CSUtil.DB
         /// <returns>SQL returns</returns>
         public List<T> RunSQL<T>(string sql, params object?[] arguments) where T : new()
         {
-            var cmd = new MySqlCommand(sql, con);
+            var cmd = new MySqlCommand(sql, Con);
             for(var i = 0; i < arguments.Length; i++)
             {
                 if(!sql.Contains($"?c{i}"))
@@ -428,7 +446,7 @@ namespace CSUtil.DB
         /// <returns>List of structs containing data from query</returns>
         private List<T> SendQuery<T>(MySqlCommand cmd, List<PropertyInfo> fields = null) where T : new()
         {
-            if (cmd.Connection != con)
+            if (cmd.Connection != Con)
             {
                 throw new Exception("Unauthorized SQL query, bad connection");
             }
@@ -503,16 +521,16 @@ namespace CSUtil.DB
 
         public void SendQuery(string query)
         {
-            MySqlCommand cmd = new MySqlCommand(query, con);
+            MySqlCommand cmd = new MySqlCommand(query, Con);
             lock (conLock)
                 cmd.ExecuteNonQuery();
         }
 
         bool CheckTableExists(string name)
         {
-            string db = con.Database;
+            string db = Con.Database;
 
-            MySqlCommand cmd = new MySqlCommand($"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{name}'; ", con);
+            MySqlCommand cmd = new MySqlCommand($"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{name}'; ", Con);
             bool good = false;
             lock (conLock)
             {
@@ -602,7 +620,7 @@ namespace CSUtil.DB
         public string GetPrimaryKey(string table)
         {
             string cmdText = $"SHOW KEYS FROM `{table}` WHERE Key_name = 'PRIMARY'";
-            MySqlCommand cmd = new MySqlCommand(cmdText, con);
+            MySqlCommand cmd = new MySqlCommand(cmdText, Con);
 
             var rdr = cmd.ExecuteReader();
 
@@ -623,7 +641,7 @@ namespace CSUtil.DB
         public void DropTable(string table)
         {
             Log.Normal("Dropping table \"" + table + "\"...");
-            var c = new MySqlCommand($"DROP TABLE `{table}`;", con);
+            var c = new MySqlCommand($"DROP TABLE `{table}`;", Con);
             c.ExecuteNonQuery();
             Log.Normal("Dropping table done");
         }
@@ -647,7 +665,7 @@ namespace CSUtil.DB
                     string primary = "";
 
                     Log.Normal($"\t\tCreating table `{tableName}`...");
-                    string cText = $"CREATE TABLE `{con.Database}`.`{tableName}` (";
+                    string cText = $"CREATE TABLE `{Con.Database}`.`{tableName}` (";
                     for (int j = 0; j < properties.Count;j++)
                     {
                         if (properties[j].GetCustomAttribute<SQLPrimaryAttribute>() != null)
@@ -664,19 +682,19 @@ namespace CSUtil.DB
 
                     cText += ";";
 
-                    MySqlCommand c = new MySqlCommand(cText, con);
+                    MySqlCommand c = new MySqlCommand(cText, Con);
                     c.ExecuteNonQuery();
                     
                     if(primary != "")
                     {
-                        c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primary}`);", con);
+                        c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primary}`);", Con);
                         c.ExecuteNonQuery();
                     }
 
                     continue;
                 }
 
-                MySqlCommand cmd = new MySqlCommand($"SELECT * FROM {tableName};", con);
+                MySqlCommand cmd = new MySqlCommand($"SELECT * FROM {tableName};", Con);
                 var rdr = cmd.ExecuteReader();
                 var columns = rdr.GetColumnSchema();
                 rdr.Close();
@@ -709,7 +727,7 @@ namespace CSUtil.DB
                     if(!found)
                     {
                         Log.Normal($"\t\tAdding column `{prop.Name}` to `{tableName}`...");
-                        MySqlCommand c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD `{prop.Name}` {GetDbTypeName(prop, true)};", con);
+                        MySqlCommand c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD `{prop.Name}` {GetDbTypeName(prop, true)};", Con);
                         c.ExecuteNonQuery();
                     }
                 }
@@ -718,10 +736,10 @@ namespace CSUtil.DB
                 if(tablePrimary != primaryKey)
                 {
                     if(tablePrimary != "")
-                        new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", con).ExecuteNonQuery();
+                        new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", Con).ExecuteNonQuery();
 
                     if (primaryKey != "")
-                        new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primaryKey}`)", con).ExecuteNonQuery();
+                        new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primaryKey}`)", Con).ExecuteNonQuery();
                 }
             }
             Log.Normal("Checking tables done");
@@ -733,8 +751,8 @@ namespace CSUtil.DB
             {
                 try
                 {
-                    con = new MySqlConnection(connectionString);
-                    con.Open();
+                    _con = new MySqlConnection(connectionString);
+                    _con.Open();
                 }
                 catch(MySqlException e)
                 {
