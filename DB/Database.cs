@@ -34,8 +34,8 @@ namespace CSUtil.DB
 
     public class Database
     {
+        private string? _connectionString = null;
         private MySqlConnection? _con;
-
         private MySqlConnection Con
         {
             get
@@ -43,9 +43,9 @@ namespace CSUtil.DB
                 if (_con == null)
                     throw new NullReferenceException("Database connection not initialized");
 
-                if (!IsAlive)
+                if (!IsAlive && _connectionString != null)
                 {
-                    if(!Connect(_con.ConnectionString))
+                    if(!Connect(_connectionString))
                         throw new Exception("Database connection failed");
                 }
 
@@ -753,6 +753,7 @@ namespace CSUtil.DB
                 {
                     _con = new MySqlConnection(connectionString);
                     _con.Open();
+                    _connectionString = connectionString;
                 }
                 catch(MySqlException e)
                 {
