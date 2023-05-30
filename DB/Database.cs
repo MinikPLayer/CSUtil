@@ -124,6 +124,23 @@ namespace CSUtil.DB
             public const string J_OR = "OR";
         }
 
+        MySqlDataReader ExecuteReader(MySqlCommand cmd)
+        {
+            try
+            {
+                var rdr = cmd.ExecuteReader();
+                return rdr;
+            }
+            catch (MySqlException e)
+            {
+                if(!Connect(_connectionString!))
+                    throw new Exception("Database connection failed");
+                
+                var rdr = cmd.ExecuteReader();
+                return rdr;
+            }
+        }
+
         public static bool IsTypeEqual(Type dbType, PropertyInfo propInfo, bool dbTypeNullable)
         {
             var localType = propInfo.PropertyType;
@@ -272,7 +289,7 @@ namespace CSUtil.DB
 
             lock (conLock)
             {
-                var reader = cmd.ExecuteReader();
+                var reader = ExecuteReader(cmd);
                 reader.Read();
                 var val = reader.GetInt32(0);
                 reader.Close();
@@ -455,7 +472,7 @@ namespace CSUtil.DB
             //MySqlCommand cmd = new MySqlCommand(query, con);
             lock (conLock)
             {
-                MySqlDataReader rdr = cmd.ExecuteReader();
+                MySqlDataReader rdr = ExecuteReader(cmd);
                 while (rdr.Read())
                 {
                     object[] values = new object[rdr.FieldCount];
@@ -534,7 +551,7 @@ namespace CSUtil.DB
             bool good = false;
             lock (conLock)
             {
-                MySqlDataReader rdr = cmd.ExecuteReader();
+                MySqlDataReader rdr = ExecuteReader(cmd);
 
                 // If true it means that we have an return - which means we have anything
                 good = rdr.Read();
@@ -622,7 +639,7 @@ namespace CSUtil.DB
             string cmdText = $"SHOW KEYS FROM `{table}` WHERE Key_name = 'PRIMARY'";
             MySqlCommand cmd = new MySqlCommand(cmdText, Con);
 
-            var rdr = cmd.ExecuteReader();
+            var rdr = ExecuteReader(cmd);
 
             bool good = rdr.Read();
             string ret = "";
@@ -695,7 +712,7 @@ namespace CSUtil.DB
                 }
 
                 MySqlCommand cmd = new MySqlCommand($"SELECT * FROM {tableName};", Con);
-                var rdr = cmd.ExecuteReader();
+                var rdr = ExecuteReader(cmd);
                 var columns = rdr.GetColumnSchema();
                 rdr.Close();
 
