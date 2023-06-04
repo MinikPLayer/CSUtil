@@ -35,35 +35,18 @@ namespace CSUtil.DB
     public class Database
     {
         private string? _connectionString = null;
-        private MySqlConnection? _con;
-        private MySqlConnection Con
+
+        private MySqlConnection GetConnection()
         {
-            get
-            {
-                if (_con == null)
-                    throw new NullReferenceException("Database connection not initialized");
-
-                if (!IsAlive && _connectionString != null)
-                {
-                    if(!Connect(_connectionString))
-                        throw new Exception("Database connection failed");
-                }
-
-                return _con;
-            }
+            if (_connectionString == null)
+                throw new Exception("Not initialized");
+            
+            return Connect(_connectionString);
         }
-        object conLock = new object();
 
-        bool IsAlive
-        {
-            get
-            {
-                if (_con == null)
-                    return false;
-                
-                return !(_con.State == ConnectionState.Closed || _con.State == ConnectionState.Broken || _con.State == ConnectionState.Connecting);
-            }
-        }
+        public bool IsAlive(MySqlConnection con) => !(con.State == ConnectionState.Closed ||
+                                                      con.State == ConnectionState.Broken ||
+                                                      con.State == ConnectionState.Connecting);
 
         Dictionary<char, string> unsafeChars = new Dictionary<char, string>()
         {
@@ -123,24 +106,7 @@ namespace CSUtil.DB
             public const string J_AND = "AND";
             public const string J_OR = "OR";
         }
-
-        MySqlDataReader ExecuteReader(MySqlCommand cmd)
-        {
-            try
-            {
-                var rdr = cmd.ExecuteReader();
-                return rdr;
-            }
-            catch (MySqlException e)
-            {
-                if(!Connect(_connectionString!))
-                    throw new Exception("Database connection failed");
-                
-                var rdr = cmd.ExecuteReader();
-                return rdr;
-            }
-        }
-
+        
         public static bool IsTypeEqual(Type dbType, PropertyInfo propInfo, bool dbTypeNullable)
         {
             var localType = propInfo.PropertyType;
@@ -283,18 +249,17 @@ namespace CSUtil.DB
             var parameters = GetWhereParameters(ref str, conditions);
             str += ";";
 
-            MySqlCommand cmd = new MySqlCommand(str, Con);
-            for (int i = 0; i < parameters.Count; i++)
-                cmd.Parameters.Add(parameters[i]);   
+            using var con = GetConnection();
+            
+            var cmd = new MySqlCommand(str, con);
+            foreach (var t in parameters)
+                cmd.Parameters.Add(t);
 
-            lock (conLock)
-            {
-                var reader = ExecuteReader(cmd);
-                reader.Read();
-                var val = reader.GetInt32(0);
-                reader.Close();
-                return val;
-            }
+            var reader = cmd.ExecuteReader();
+            reader.Read();
+            var val = reader.GetInt32(0);
+            reader.Close();
+            return val;
         }
 
         public int Delete(string table, params SQLCondition[] conditionParams)
@@ -303,12 +268,13 @@ namespace CSUtil.DB
             var parameters = GetWhereParameters(ref str, conditionParams);
             str += ";";
 
-            MySqlCommand cmd = new MySqlCommand(str, Con);
-            for (int i = 0; i < parameters.Count; i++)
-                cmd.Parameters.Add(parameters[i]);
+            using var con = GetConnection();
+            
+            var cmd = new MySqlCommand(str, con);
+            foreach (var t in parameters)
+                cmd.Parameters.Add(t);
 
-            lock (conLock)
-                return cmd.ExecuteNonQuery();
+            return cmd.ExecuteNonQuery();
         }
 
         public int Update<T>(T value, string table, params SQLCondition[] conditionsParams) => Update(value, table, null, conditionsParams);
@@ -331,12 +297,12 @@ namespace CSUtil.DB
             parameters.AddRange(GetWhereParameters(ref str, conditionsParams, it));
             str += ";";
             
-            MySqlCommand cmd = new MySqlCommand(str, Con);
+            using var con = GetConnection();
+            MySqlCommand cmd = new MySqlCommand(str, con);
             for (int i = 0; i < parameters.Count; i++)
                 cmd.Parameters.Add(parameters[i]);
 
-            lock (conLock)
-                return cmd.ExecuteNonQuery();
+            return cmd.ExecuteNonQuery();
         }
 
         public int InsertArray<T>(T[] values, string table, List<PropertyInfo> fields = null)
@@ -385,14 +351,13 @@ namespace CSUtil.DB
                 str += ";";
             }
 
-            lock (conLock)
-            {
-                MySqlCommand cmd = new MySqlCommand(str, Con);
-                for (int i = 0; i < parameters.Count; i++)
-                    cmd.Parameters.Add(parameters[i]);
-                
-                return cmd.ExecuteNonQuery();
-            }
+
+            using var con = GetConnection();
+            var cmd = new MySqlCommand(str, con);
+            foreach (var t in parameters)
+                cmd.Parameters.Add(t);
+
+            return cmd.ExecuteNonQuery();
         }
 
         public int InsertData<T>(T value, string table, List<PropertyInfo> fields = null) => InsertArray(new T[1] { value }, table, fields);
@@ -424,9 +389,10 @@ namespace CSUtil.DB
 
             str += ";";
 
-            MySqlCommand cmd = new MySqlCommand(str, Con);
-            for (int i = 0; i < parameters.Count; i++)
-                cmd.Parameters.Add(parameters[i]);  
+            using var con = GetConnection();
+            var cmd = new MySqlCommand(str, con);
+            foreach (var t in parameters)
+                cmd.Parameters.Add(t);
 
             return SendQuery<T>(cmd, fields);
         }
@@ -440,7 +406,8 @@ namespace CSUtil.DB
         /// <returns>SQL returns</returns>
         public List<T> RunSQL<T>(string sql, params object?[] arguments) where T : new()
         {
-            var cmd = new MySqlCommand(sql, Con);
+            using var con = GetConnection();
+            var cmd = new MySqlCommand(sql, con);
             for(var i = 0; i < arguments.Length; i++)
             {
                 if(!sql.Contains($"?c{i}"))
@@ -450,7 +417,6 @@ namespace CSUtil.DB
             }
 
             // MySQL automatically checks if sql parameters ?c{i} are included, so no need to check it here
-
             return SendQuery<T>(cmd);
         }
 
@@ -463,101 +429,93 @@ namespace CSUtil.DB
         /// <returns>List of structs containing data from query</returns>
         private List<T> SendQuery<T>(MySqlCommand cmd, List<PropertyInfo> fields = null) where T : new()
         {
-            if (cmd.Connection != Con)
-            {
-                throw new Exception("Unauthorized SQL query, bad connection");
-            }
-
             List<T> ret = new List<T>();
-            //MySqlCommand cmd = new MySqlCommand(query, con);
-            lock (conLock)
+            
+            var rdr = cmd.ExecuteReader();
+            while (rdr.Read())
             {
-                MySqlDataReader rdr = ExecuteReader(cmd);
-                while (rdr.Read())
+                object[] values = new object[rdr.FieldCount];
+                // Get row
+                rdr.GetValues(values);
+
+                // Check for single types (like int, string, etc)
+                var tp = typeof(T);
+                if (Nullable.GetUnderlyingType(tp) is Type t)
+                    tp = t;
+
+                if (!tp.IsClass && tp.IsValueType && values.Length == 1)
                 {
-                    object[] values = new object[rdr.FieldCount];
-                    // Get row
-                    rdr.GetValues(values);
-
-                    // Check for single types (like int, string, etc)
-                    var tp = typeof(T);
-                    if (Nullable.GetUnderlyingType(tp) is Type t)
-                        tp = t;
-
-                    if (!tp.IsClass && tp.IsValueType && values.Length == 1)
+                    var value = values[0];
+                    var lst = new List<T>
                     {
-                        var value = values[0];
-                        var lst = new List<T>
-                        {
-                            (T)Convert.ChangeType(value, tp)
-                        };
-                        return lst;
-                    }
-
-                    if (fields == null)
-                        fields = GetProperties<T>(rdr);
-
-                    if (values.Length != fields.Count)
-                    {
-                        throw new Exception("Struct fields don't match SQL table fields");
-                    }
-
-                    T newT = new T();
-                    for (int i = 0; i < fields.Count; i++)
-                    {
-                        if (!fields[i].CanWrite)
-                            continue;
-                            
-                        if (values[i].GetType() == typeof(DBNull))
-                        {
-                            fields[i].SetValue(newT, null);
-                        }
-                        else
-                        {
-                            var val = values[i];
-                            var type = val.GetType();
-                            if (type != fields[i].PropertyType && !fields[i].PropertyType.IsEnum)
-                            {
-                                var converter = TypeDescriptor.GetConverter(fields[i].PropertyType);
-                                if (!converter.CanConvertFrom(type))
-                                    throw new ArgumentException($"Cannot convert from {type} to {fields[i].PropertyType}");
-
-                                val = converter.ConvertFrom(val);
-                            }
-                            
-                            fields[i].SetValue(newT, val);
-
-                        }
-                    }
-                    ret.Add(newT);
+                        (T)Convert.ChangeType(value, tp)
+                    };
+                    return lst;
                 }
-                rdr.Close();
-                return ret;
+
+                if (fields == null)
+                    fields = GetProperties<T>(rdr);
+
+                if (values.Length != fields.Count)
+                {
+                    throw new Exception("Struct fields don't match SQL table fields");
+                }
+
+                T newT = new T();
+                for (int i = 0; i < fields.Count; i++)
+                {
+                    if (!fields[i].CanWrite)
+                        continue;
+                        
+                    if (values[i].GetType() == typeof(DBNull))
+                    {
+                        fields[i].SetValue(newT, null);
+                    }
+                    else
+                    {
+                        var val = values[i];
+                        var type = val.GetType();
+                        if (type != fields[i].PropertyType && !fields[i].PropertyType.IsEnum)
+                        {
+                            var converter = TypeDescriptor.GetConverter(fields[i].PropertyType);
+                            if (!converter.CanConvertFrom(type))
+                                throw new ArgumentException($"Cannot convert from {type} to {fields[i].PropertyType}");
+
+                            val = converter.ConvertFrom(val);
+                        }
+                        
+                        fields[i].SetValue(newT, val);
+
+                    }
+                }
+                ret.Add(newT);
             }
+            rdr.Close();
+            return ret;
+        
         }
 
         public void SendQuery(string query)
         {
-            MySqlCommand cmd = new MySqlCommand(query, Con);
-            lock (conLock)
-                cmd.ExecuteNonQuery();
+            using var con = GetConnection();
+            var cmd = new MySqlCommand(query, con);
+            cmd.ExecuteNonQuery();
         }
 
         bool CheckTableExists(string name)
         {
-            string db = Con.Database;
+            using var con = GetConnection();
+            var db = con.Database;
 
-            MySqlCommand cmd = new MySqlCommand($"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{name}'; ", Con);
-            bool good = false;
-            lock (conLock)
-            {
-                MySqlDataReader rdr = ExecuteReader(cmd);
+            var cmd = new MySqlCommand($"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{name}'; ", con);
+            var good = false;
 
-                // If true it means that we have an return - which means we have anything
-                good = rdr.Read();
+            var rdr = cmd.ExecuteReader();
 
-                rdr.Close();
-            }
+            // If true it means that we have an return - which means we have anything
+            good = rdr.Read();
+
+            rdr.Close();
 
             return good;
         }
@@ -636,10 +594,12 @@ namespace CSUtil.DB
 
         public string GetPrimaryKey(string table)
         {
+            using var con = GetConnection();
+            
             string cmdText = $"SHOW KEYS FROM `{table}` WHERE Key_name = 'PRIMARY'";
-            MySqlCommand cmd = new MySqlCommand(cmdText, Con);
+            MySqlCommand cmd = new MySqlCommand(cmdText, con);
 
-            var rdr = ExecuteReader(cmd);
+            var rdr = cmd.ExecuteReader();
 
             bool good = rdr.Read();
             string ret = "";
@@ -657,14 +617,19 @@ namespace CSUtil.DB
 
         public void DropTable(string table)
         {
+            using var con = GetConnection();
+            
             Log.Normal("Dropping table \"" + table + "\"...");
-            var c = new MySqlCommand($"DROP TABLE `{table}`;", Con);
+            var c = new MySqlCommand($"DROP TABLE `{table}`;", con);
             c.ExecuteNonQuery();
             Log.Normal("Dropping table done");
         }
 
         public void CreateDBStruct(List<(string, Type)> tables)
         {
+            Log.Normal("Connecting to DB...");
+            using var con = GetConnection();
+            
             Log.Normal("Checking tables...");
             for(int i = 0;i<tables.Count;i++)
             {
@@ -682,7 +647,7 @@ namespace CSUtil.DB
                     string primary = "";
 
                     Log.Normal($"\t\tCreating table `{tableName}`...");
-                    string cText = $"CREATE TABLE `{Con.Database}`.`{tableName}` (";
+                    string cText = $"CREATE TABLE `{con.Database}`.`{tableName}` (";
                     for (int j = 0; j < properties.Count;j++)
                     {
                         if (properties[j].GetCustomAttribute<SQLPrimaryAttribute>() != null)
@@ -699,20 +664,20 @@ namespace CSUtil.DB
 
                     cText += ";";
 
-                    MySqlCommand c = new MySqlCommand(cText, Con);
+                    var c = new MySqlCommand(cText, con);
                     c.ExecuteNonQuery();
                     
                     if(primary != "")
                     {
-                        c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primary}`);", Con);
+                        c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primary}`);", con);
                         c.ExecuteNonQuery();
                     }
 
                     continue;
                 }
 
-                MySqlCommand cmd = new MySqlCommand($"SELECT * FROM {tableName};", Con);
-                var rdr = ExecuteReader(cmd);
+                var cmd = new MySqlCommand($"SELECT * FROM {tableName};", con);
+                var rdr = cmd.ExecuteReader();
                 var columns = rdr.GetColumnSchema();
                 rdr.Close();
 
@@ -744,7 +709,7 @@ namespace CSUtil.DB
                     if(!found)
                     {
                         Log.Normal($"\t\tAdding column `{prop.Name}` to `{tableName}`...");
-                        MySqlCommand c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD `{prop.Name}` {GetDbTypeName(prop, true)};", Con);
+                        MySqlCommand c = new MySqlCommand($"ALTER TABLE `{tableName}` ADD `{prop.Name}` {GetDbTypeName(prop, true)};", con);
                         c.ExecuteNonQuery();
                     }
                 }
@@ -753,38 +718,35 @@ namespace CSUtil.DB
                 if(tablePrimary != primaryKey)
                 {
                     if(tablePrimary != "")
-                        new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", Con).ExecuteNonQuery();
+                        new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", con).ExecuteNonQuery();
 
                     if (primaryKey != "")
-                        new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primaryKey}`)", Con).ExecuteNonQuery();
+                        new MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{primaryKey}`)", con).ExecuteNonQuery();
                 }
             }
             Log.Normal("Checking tables done");
         }
 
-        public bool Connect(string connectionString)
+        public MySqlConnection Connect(string connectionString)
         {
-            lock (conLock)
+            try
             {
-                try
-                {
-                    _con = new MySqlConnection(connectionString);
-                    _con.Open();
-                    _connectionString = connectionString;
-                }
-                catch(MySqlException e)
-                {
-                    Log.FatalError("Cannot connect to database: \n" + e.ToString());
-                    throw new Exception("Cannot connect to database");
-                }
+                var con = new MySqlConnection(connectionString);
+                con.Open();
+                _connectionString ??= connectionString;
+                return con;
             }
-
-            return IsAlive;
+            catch(MySqlException e)
+            {
+                Log.FatalError("Cannot connect to database: \n" + e.ToString());
+                throw new Exception("Cannot connect to database");
+            }
         }
 
         public bool Connect(string username, string password, string dbName, string ip = "127.0.0.1", string port = "3306")
         {
-            return Connect("server=" + ip + ";user=" + username + ";database=" + dbName + ";port=" + port.ToString() + ";password=" + password);
+            var con = Connect("server=" + ip + ";user=" + username + ";database=" + dbName + ";port=" + port.ToString() + ";password=" + password);
+            return IsAlive(con);
         }
     }
 }
