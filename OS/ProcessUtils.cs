@@ -6,6 +6,8 @@ namespace CSUtil.OS
 {
     public static class ProcessUtils
     {
+        public static bool NotAvaloniaPreview { get; set; }
+
         private static string FindIndexedProcessName(int pid)
         {
             if (!OperatingSystem.IsWindows())
@@ -89,6 +91,9 @@ namespace CSUtil.OS
         public static async Task<bool> IsAvalonia()
         {
 #if DEBUG
+            if (NotAvaloniaPreview)
+                return false;
+
             var parentName = await GetParentName();
             var isAval = parentName.Contains("java");
             Console.WriteLine($"IsAvalonia: {isAval}");
